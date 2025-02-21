@@ -1,14 +1,15 @@
-from django.views.static import serve
 from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, re_path
-from transaction import views as transaction_views
-from cart import views as cart_views
-from . import views as views
 from django.contrib.auth import views as auth_views
-from inventory import views as inventory_views
 from django.contrib.staticfiles.storage import staticfiles_storage
+from django.urls import path, re_path
+from django.views.static import serve
 from django.views.generic.base import RedirectView
+from cart import views as cart_views
+from inventory import views as inventory_views
+from transaction import views as transaction_views
+from . import views as views
 
 urlpatterns = [
         #Admin URL
@@ -22,11 +23,15 @@ urlpatterns = [
         path('verify-otp/<uidb64>/', views.verify_otp, name='verify_otp'),                                      # OTP verification
         path('reset-password/<uidb64>/', views.reset_password, name='reset_password'),                          # Reset password
         path('reset-password-complete/', views.password_reset_complete, name='password_reset_complete'),        # Password reset complete
-
+        path('cart/remove/<str:barcode>/', views.remove_from_cart, name='remove_from_cart'),
 
         # Dashboard URLs, Sales Dashboard is set Up as home Currently
         path('',views.dashboard_sales, name="home"),
+        path('dashboard/', views.dashboard, name='dashboard'),
+        
+        path('set_client/', views.set_client, name='set_client'),
         path('dashboard_sales/',views.dashboard_sales, name="dashboard_sales"),
+        path('profit_loss_dashboard/',views.profit_loss_dashboard, name="profit_loss_dashboard"),
         path('dashboard_department/',views.dashboard_department, name="dashboard_department"),
         path('dashboard_products/',views.dashboard_products, name="dashboard_products"),
         path("department_report/<start_date>/<end_date>/",views.report_regular),
@@ -37,6 +42,9 @@ urlpatterns = [
         # Register URLs
         path('register/', views.register, name="register"),
         path('search_customer/', views.search_customer, name='search_customer'),
+        path('get-product-details/', views.get_product_details, name='get_product_details'),
+        path('set_customer_session/', views.set_customer_session, name='set_customer_session'),
+        path('reset_customer_session/', views.reset_customer_session, name='reset_customer_session'),
         path('save_customer/', views.save_customer, name='save_customer'),
         path('register/ProductNotFound/', views.register, name="ProductNotFound"),
         path('register/cart_clear/', cart_views.cart_clear, name='cart_clear'),
@@ -46,6 +54,8 @@ urlpatterns = [
         path('register/recall_transaction/<recallTransNo>/', transaction_views.recallTransaction, name='recall_transaction_no'),
         path('register/product_lookup/', inventory_views.product_lookup, name='product_lookup_default'),
         path('register/<manual_department>/<amount>/', inventory_views.manualAmount, name='manual_amount'),
+        path('api/add_displayed_item/', views.add_displayed_item, name='add_displayed_item'),
+        path('api/remove_displayed_item/', views.remove_displayed_item, name='remove_displayed_item'),
 
         # Cart URLs
         path('cart/add/<id>/<qty>/', cart_views.cart_add, name='cart_add'),
@@ -70,4 +80,4 @@ urlpatterns = [
 
         # Static Files Serve WHEN Debug is False in DEV ENV
         re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATIC_ROOT}),
-    ] 
+    ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

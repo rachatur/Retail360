@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import transaction, productTransaction
+from .models import transaction, productTransaction, Customer
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.http import urlencode
@@ -94,3 +94,31 @@ class ProductTransactionAdmin(ImportExportModelAdmin):
 
     class Media:
         js = ["js/jquery.js","js/list_filter_collapse.js",]
+
+@admin.register(Customer)
+class CustomerAdmin(ImportExportModelAdmin):
+    list_display = ("customer_id", "customer_name", "customer_contact", "customer_email", "customer_payment_method", "created_by_link")
+    fields = ["customer_name", "customer_contact", "customer_email", "customer_address", "customer_payment_method", "created_by"]
+    search_fields = ["customer_name", "customer_contact", "customer_email"]
+    list_filter = ("created_by", "customer_payment_method")
+
+    def created_by_link(self, obj=None):
+        if obj.created_by is not None:
+            return format_html(f'<a href="/admin/auth/user/{obj.created_by.id}/change/" style="color:#4e73df;">{obj.created_by}</a>')
+        return "-"
+    created_by_link.short_description = "Created By"
+
+    def has_add_permission(self, request, *args):
+        return True  # You can enable or disable the "Add" permission
+
+    def has_change_permission(self, request, *args):
+        return True  # You can enable or disable the "Change" permission
+
+    def has_delete_permission(self, request, *args):
+        return False  # You can enable or disable the "Delete" permission
+
+    def has_import_permission(self, request, *args):
+        return True  # You can enable or disable the "Import" permission
+
+    class Media:
+        js = ["js/jquery.js", "js/list_filter_collapse.js"]  # You can add custom JavaScript here for UI enhancements

@@ -185,14 +185,14 @@ def endTransaction(request,type,value):
         if type == "card":  # Card Transaction
             # EBT Transaction
             if value == "EBT":
-                return_transaction = addTransaction(request.user, "EBT", total, cart, total, customer)
+                return_transaction = addTransaction(request, request.user, "EBT", total, cart, total, customer)
             # DEBIT/CREDIT Transaction
             elif value == "DEBIT_CREDIT":
-                return_transaction = addTransaction(request.user, "DEBIT/CREDIT", total, cart, total, customer)
+                return_transaction = addTransaction(request, request.user, "DEBIT/CREDIT", total, cart, total, customer)
         elif type == "cash":  # Cash Transaction
             value = round(float(value), 2)
             if value >= total:
-                return_transaction = addTransaction(request.user, "CASH", total, cart, value, customer)
+                return_transaction = addTransaction(request, request.user, "CASH", total, cart, value, customer)
 
         if return_transaction:
             Cart(request).clear()
@@ -203,14 +203,26 @@ def endTransaction(request,type,value):
         return redirect("register")
 
 
-def addTransaction(user,payment_type,total,cart,value,customer):
+def addTransaction(request, user,payment_type,total,cart,value,customer):
+    currency = request.session.get('curency_symbol')
+    store_name = request.session.get('STORE_NAME', 'Default Store')
+    store_address = request.session.get('STORE_ADDRESS', '')
+    address_lines = []
+
+    # Keep breaking the address into lines of 32 characters
+    while len(store_address) > 32:
+        address_lines.append(store_address[:32])  
+        store_address = store_address[32:]  
+    address_lines.append(store_address)
+    RECEIPT_HEADER = f"{store_name} \n" + "\n".join(address_lines)
+    
     transaction_id = datetime.now().strftime('%Y%m%d%H%M%S%f')
     cart_df = pd.DataFrame(cart).T.reset_index(drop=True)
     cart_df.index = cart_df.index + 1
     tax_total = round(cart_df["tax_value"].astype(float).sum(),2)
     deposit_total = round(cart_df["deposit_value"].astype(float).sum(),2)
     cart_df["tax"] = cart_df["tax_value"].astype(float).apply(lambda x: "T" if x>0 else "-T" if x<0 else "")
-    cart_df["deposit"] = cart_df["deposit_value"].astype(float).apply(lambda x: "" if x==0.00 else x )
+    cart_df["deposit"] = cart_df["deposit_value"].astype(float).apply(lambda x: "0" if x==0.00 else x )
     
     # Building Receipt
     cart_string =  "\n".join(list(cart_df.apply(
@@ -222,10 +234,10 @@ def addTransaction(user,payment_type,total,cart,value,customer):
     
     total_string = f"Sub-Total: {round(total-tax_total,2)}  Tax-Total: {round(tax_total,2)}".center(settings.RECEIPT_CHAR_COUNT)
     total_string = total_string + "\n" + (' - '*int(settings.RECEIPT_CHAR_COUNT/3)) +"\n" + f"{'TOTAL SALE':>10}: {round(total,2)}".rjust(settings.RECEIPT_CHAR_COUNT)
-    total_string = total_string + "\n" + f"{str(payment_type):>10}: $ {round(value,2):.2f}".rjust(settings.RECEIPT_CHAR_COUNT)
-    total_string = total_string + "\n" + f"{'CHANGE':>10}: $ {round(value-total,2):.2f}".rjust(settings.RECEIPT_CHAR_COUNT)
+    total_string = total_string + "\n" + f"{str(payment_type):>10}: {currency} {round(value,2):.2f}".rjust(settings.RECEIPT_CHAR_COUNT)
+    total_string = total_string + "\n" + f"{'CHANGE':>10}: {currency} {round(value-total,2):.2f}".rjust(settings.RECEIPT_CHAR_COUNT)
 
-    receipt = settings.RECEIPT_HEADER+ "\n\n" +cart_string+ f"\n{'-'*settings.RECEIPT_CHAR_COUNT}\n{total_string}"+"\n\n" + settings.RECEIPT_FOOTER
+    receipt = RECEIPT_HEADER + "\n\n" +cart_string+ f"\n{'-'*settings.RECEIPT_CHAR_COUNT}\n{total_string}"+"\n\n" + settings.RECEIPT_FOOTER
     # receipt = settings.RECEIPT_HEADER+f"\n{'*'*int(settings.RECEIPT_CHAR_COUNT)}\n" +cart_string+ f"\n{'-'*settings.RECEIPT_CHAR_COUNT}\n{total_string}"+f"\n{'*'*int(settings.RECEIPT_CHAR_COUNT)}\n" + settings.RECEIPT_FOOTER
     
     receipt = "\n".join([i.center(settings.RECEIPT_CHAR_COUNT) for i in receipt.splitlines()])

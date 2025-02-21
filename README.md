@@ -1,2 +1,2 @@
-# Retail360
-Working Error Free Code of Retail360 POS
+# ME360-main
+Manual Integration code to be stored here

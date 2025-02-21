@@ -1,79 +1,186 @@
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm, PasswordChangeForm
-from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.mail import send_mail
-from django.shortcuts import render, redirect
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render, redirect
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django import forms
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
 from .forms import OTPForm, EmailForm
 from cart.models import Cart, displayed_items
 from inventory.models import product
-from transaction.models import productTransaction, transaction, Profile, Customer
+from transaction.models import productTransaction, transaction, Customer
 from transaction.views import DateSelector
+from IDENTITY.models import Client, Profile, User, Domain
+from django.shortcuts import get_object_or_404
 from plotly import express as px
 from plotly import offline as po
 import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz, os, shutil, random, json
+from django_tenants.utils import schema_context
+from django.db.models import Count, Sum
 import logging
 logger = logging.getLogger(__name__)
 
 tz = pytz.timezone("US/Eastern")
 
+def set_currency_symbol(request):
+    currency = request.session.get('currency')
+   
+    if not currency:
+        return None
+   
+    all_currencies = { 'dollar':'$','euro':'€', 'gbp':'£','ils':'₪', 'rupee':'₹', 'jpy':'¥',  'krw':'₩','ruble':'₽','try':'₺', }
+   
+   
+    for key, symbol in all_currencies.items():
+        if currency == key:
+            request.session['curency_symbol'] = symbol
+            break  
 
+    return True
+    
+
+# Barcode Form
 class EnterBarcode(forms.Form):
     name = forms.CharField(
-        label="Name",
-        widget=forms.TextInput(attrs={'style': "width:100%"}),
+        label="Product Name",
+        widget=forms.TextInput(attrs={'id': 'product-name', 'style': "width:100%"}),
         max_length=100, required=False 
     )
     barcode = forms.CharField(
-        widget=forms.TextInput(attrs={'autofocus': "autofocus", 'autocomplete': "off", 'style': "width:100%"}),
+        widget=forms.TextInput(attrs={'id': 'barcode', 'autofocus': "autofocus", 'autocomplete': "on", 'style': "width:100%"}),
         max_length=32, required=False
     )
     qty = forms.IntegerField(
         label="Quantity",
-        widget=forms.TextInput(attrs={'style': "width:100%"}), required=False 
+        widget=forms.TextInput(attrs={'id': 'quantity', 'style': "width:100%"}), required=False 
     )
+    def clean_qty(self):
+        qty = self.cleaned_data.get('qty')
+        if qty < 0:
+            raise ValidationError("Quantity cannot be negative.")
+        return qty
+
+
+@login_required(login_url="/user/login/")
+def set_client(request):
+    if request.method == 'POST':
+        # print('request received')
+        try:
+            # Parse the client_id from the request body (in JSON format)
+            client_data = json.loads(request.body)
+            client_id = client_data.get('client_id')
+            # print('Client id', client_id)
+
+            # Set the client_id in session
+            if client_id:
+                domain = Domain.objects.get(tenant_id=client_id)
+                request.session['hostname'] = domain.domain
+                # print(f"Current client domain: {request.session['hostname']}")
+                request.session['selected_client'] = client_id  # Store client ID in session
+                client_data = Client.objects.get(client_id = client_id)
+                # request.session['logo'] = client_data.client_logo
+                request.session['logo'] = client_data.client_logo.url if client_data.client_logo else 'None'
+                request.session['currency'] = client_data.client_currency
+                request.session['STORE_NAME'] = client_data.client_name
+                request.session['STORE_ADDRESS'] = client_data.client_address
+                request.session['STORE_PHONE'] = client_data.client_contact
+                set_currency_symbol(request)
+
+                return JsonResponse({'success': True})
+
+            return JsonResponse({'success': False, 'error': 'No client ID provided'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f" execution failed {str(e)}"})
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+
+@login_required(login_url="/user/login/")
+def get_product_details(request):
+    name = request.GET.get('name')
+    barcode = request.GET.get('barcode')
+
+    # Start with a base query to fetch all products with qty > 1
+    product_query = product.objects.filter(qty__gt=1)
+
+    # Filter by name or barcode if provided
+    if name:
+        product_query = product_query.filter(name__iexact=name)
+    elif barcode:
+        product_query = product_query.filter(barcode=barcode)
+    else:
+        return JsonResponse({'error': 'Invalid request'}, status=400)
+
+    try:
+        # If we have a matching product, fetch it
+        # product_instance = product_query.get()
+        product_instance = product_query.first()
+        
+        # Return product details if found
+        return JsonResponse({
+            'name': product_instance.name,
+            'barcode': product_instance.barcode,
+        })
+
+    except product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found or quantity less than 1'}, status=404)
 
 
 @login_required(login_url="/user/login/")
 def register(request):
-    form = EnterBarcode(initial={'qty': 0})
+    form = EnterBarcode(initial={'qty': 1})
 
     if request.method == "POST":
-        customer_id = request.POST.get('customer_id', None)
-        customer_number = request.POST.get('customer_number', None)
-        customer_name = request.POST.get('customer_name', None)
-
-        # Save the customer info in the session, if needed
-        request.session['customer_id'] = customer_id if customer_id else 'not_provided'
-        request.session['customer_number'] = customer_number if customer_number else 'not_provided'
-        request.session['customer_name'] = customer_name if customer_name else ''
-
         form = EnterBarcode(request.POST)
         if form.is_valid():
             barcode = form.cleaned_data.get('barcode', '').strip()
-            qty = form.cleaned_data.get('qty')  # Default to 1 if no quantity is provided
+            qty = form.cleaned_data.get('qty') or 1  # Default to 1 if no quantity is provided
             name = form.cleaned_data.get('name', '').strip()
 
-            if barcode:
-                return redirect(f"/cart/add/{barcode}/{qty}")
-            elif name:
-                if not name:
-                    return redirect('/register/?ProductNotFound=true')
-                
-                # Perform case-insensitive search for the product name
+            if barcode and not name:
+                # Fetch product name using barcode
+                try:
+                    product_obj = product.objects.get(barcode=barcode)
+                    name = product_obj.name
+                    # print(f"Product found for barcode '{barcode}': Name: {name}")
+                    if qty > product_obj.qty:
+                        return redirect(f"/register/?ProductNotFound=true")
+                    return redirect(f"/cart/add/{barcode}/{qty}")
+                except product.DoesNotExist:
+                    # print(f"Product with barcode '{barcode}' not found.")
+                    return redirect(f"/register/?ProductNotFound=true")
+
+            elif name and not barcode:
+                # Fetch barcode using product name
                 try:
                     product_obj = product.objects.get(name__iexact=name)
-                    print(f"Product found for name '{name}': Barcode: {product_obj.barcode}")
-                    return redirect(f"/cart/add/{product_obj.barcode}/{qty}")
+                    barcode = product_obj.barcode
+                    # print(f"Product found for name '{name}': Barcode: {barcode}")
+                    if qty > product_obj.qty:
+                        return redirect(f"/register/?ProductNotFound=true")
+                    return redirect(f"/cart/add/{barcode}/{qty}")
                 except product.DoesNotExist:
-                    print(f"Product with name '{name}' not found.")
+                    # print(f"Product with name '{name}' not found.")
+                    return redirect(f"/register/?ProductNotFound=true")
+
+            elif barcode and name:
+                # Both barcode and name provided
+                # print(f"Both barcode '{barcode}' and name '{name}' provided. Processing...")
+                try:
+                    product_obj = product.objects.get(barcode=barcode)
+                    # print(f"Product found for barcode '{barcode}': Name: {name}")
+                    if qty > product_obj.qty:
+                        return redirect(f"/register/?ProductNotFound=true")
+                    return redirect(f"/cart/add/{barcode}/{qty}")
+                except product.DoesNotExist:
+                    # print(f"Product with barcode '{barcode}' not found.")
                     return redirect(f"/register/?ProductNotFound=true")
 
     try:
@@ -84,6 +191,11 @@ def register(request):
         cart = {}
         Total = 0
         Tax_Total = 0
+    
+    # Fetch top-selling products based on productTransaction
+    top_selling_items = productTransaction.objects.annotate(
+        total_qty_sold= Sum('qty')
+    ).order_by('-total_qty_sold')[:24]  # Get top 5 selling products
 
     context = {
         'form': form,
@@ -92,11 +204,70 @@ def register(request):
         'total': Total,
         'tax_total': Tax_Total,
         'displayed_items': displayed_items.objects.all(),
+        'top_selling_items': top_selling_items,  # Add top-selling items here
     }
     request.session["Total"] = Total
     request.session["Tax_Total"] = Tax_Total
     request.session.modified = True
     return render(request, 'retailScreen.html', context=context)
+
+
+@login_required(login_url="/user/login/")
+def remove_from_cart(request, barcode):
+    try:
+        if request.method == "POST":
+            cart = request.session.get('cart', {})
+            if barcode in cart:
+                del cart[barcode]  # Remove the product
+                # Recalculate totals
+                total = round(sum(float(item['line_total']) for item in cart.values()), 2)
+                tax_total = round(sum(float(item['tax_value']) for item in cart.values()), 2)
+                request.session['cart'] = cart  # Update session cart
+                return JsonResponse({
+                    "success": True,
+                    "message": "Product removed from cart.",
+                    "updatedTotal": total,
+                    "updatedTaxTotal": tax_total
+                })
+            else:
+                return JsonResponse({"success": False, "message": "Product not found in cart."})
+        else:
+            return JsonResponse({"success": False, "message": "Invalid request method."})
+    except Exception as e:
+        return JsonResponse({"success": False, "message": f"An error occurred: {str(e)}"})
+
+@login_required(login_url="/user/login/")
+def clear_cart(request):
+    if request.method == "POST":
+        request.session['cart'] = {}  # Clear the cart
+        return JsonResponse({"success": True, "message": "Cart cleared successfully."})
+    return JsonResponse({"success": False, "message": "Invalid request method."})
+
+
+@login_required(login_url="/user/login/")
+def add_to_cart(request, barcode, quantity):
+    if request.method == "POST":
+        Product = get_object_or_404(product, barcode=barcode)  # Get the product from DB
+        cart = request.session.get('cart', {})
+        
+        if barcode in cart:
+            # Update quantity if already in cart
+            cart[barcode]['quantity'] += int(quantity)
+        else:
+            # Add a new product to the cart
+            cart[barcode] = {
+                'name': Product.name,
+                'price': Product.price,
+                'quantity': int(quantity),
+                'tax_value': Product.tax_value,
+                'deposit_value': Product.deposit_value,
+                'line_total': Product.price * int(quantity),
+            }
+        
+        # Update session
+        request.session['cart'] = cart
+        return JsonResponse({"success": True, "message": "Product added to cart."})
+    return JsonResponse({"success": False, "message": "Invalid request method."})
 
 
 @login_required(login_url="/user/login/")
@@ -128,17 +299,47 @@ def search_customer(request):
 
 
 @login_required(login_url="/user/login/")
+def set_customer_session(request):
+    # Get the customer data from the request
+    customer_id = request.GET.get('customer_id', 'not_provided')
+    customer_number = request.GET.get('customer_number', 'not_provided')
+    customer_name = request.GET.get('customer_name')
+    customer_email = request.GET.get('customer_email')
+    customer_address = request.GET.get('customer_address')
+    
+    # Save the data in the session
+    request.session['customer_id'] = customer_id if customer_id else 'not_provided'
+    request.session['customer_number'] = customer_number if customer_number else 'not_provided'
+    request.session['customer_name'] = customer_name if customer_name else ''
+    request.session['customer_email'] = customer_email if customer_email else ''
+    request.session['customer_address'] = customer_address if customer_address else ''
+    # print(request.session['customer_id'], request.session['customer_number'],request.session['customer_name'] )
+    
+    # Return a success response (no need to render anything)
+    return JsonResponse({'status': 'success'})
+
+
+@login_required(login_url="/user/login/")
+def reset_customer_session(request):
+    # Clear the session data for the customer fields
+    request.session['customer_id'] = None
+    request.session['customer_number'] = None
+    request.session['customer_name'] = None
+
+    # Return a success response
+    return JsonResponse({'status': 'success'})
+
+
+@login_required(login_url="/user/login/")
 def save_customer(request):
     if request.method == 'POST':
+        print('request recieved')
         try:
-            # Get the data from the request
-            data = json.loads(request.body)
-
-            customer_id = data.get('customer_id')
-            customer_name = data.get('customer_name')
-            customer_number = data.get('customer_number')
-            customer_email = data.get('customer_email')
-            customer_address = data.get('customer_address')
+            customer_id = request.POST.get('customer_id')
+            customer_name = request.POST.get('customer_name')
+            customer_number = request.POST.get('customer_number')
+            customer_email = request.POST.get('customer_email')
+            customer_address = request.POST.get('customer_address')
 
             # Check if the customer exists and update or create accordingly
             customer, created = Customer.objects.update_or_create(
@@ -168,6 +369,7 @@ def retail_display(request,values=None):
         try:
             # response = f"""<div class="h5 text-dark" style="text-align:left;white-space:pre-wrap;padding-right:50px;"><div class="p-2">{'SUB-TOTAL':<15}:     {round(request.session["Total"]-request.session["Tax_Total"],2)}</div><div class="p-2">{'TAX-TOTAL':<16}:     {request.session["Tax_Total"]}</div></div><hr><div class="h1 text-gray-900 pl-5">TOTAL : <span style="padding-left:80px;">{request.session["Total"]}</span></div>"""
             cart = request.session[settings.CART_SESSION_ID]
+            currency = request.session.get('curency_symbol')
             
             if len(cart) == 0: return HttpResponse("IMAGE")
             
@@ -201,22 +403,23 @@ def retail_display(request,values=None):
             response = response + f"""</table> </div> 
                                         <div class="card-footer py-3">
                                             <h1 class="m-0 font-weight-bold text-primary">Transaction Total:
-                                            <span class="m-0 font-weight-bold text-dark" style="float:right;item-align:right">$ {total:.2f}</span>
+                                            <span class="m-0 font-weight-bold text-dark" style="float:right;item-align:right">{currency} {total:.2f}</span>
                                             </h1>
                                         </div>
                                     </div>"""
             return HttpResponse(response)
         except Exception as e:
-            print(e)
+            # print(e)
             return HttpResponse("")
     
-    path="images4display/"  # insert the path to your directory   
-    if os.path.exists(f"./{path}"):
-        # print(f"{settings.STATIC_ROOT}/{path}")
-        shutil.copytree(f"./{path}", f"{settings.STATIC_ROOT}/{path}", dirs_exist_ok=True)
-    img_list = [ path+i for i in  os.listdir(path) if not i.endswith('.md')]
+    # path= request.session.get('logo')  # insert the path to your directory   
+    # if os.path.exists(f"{path}"):
+    #     print(f"{settings.STATIC_ROOT}/{path}")
+    #     shutil.copytree(f"./{path}", f"{settings.STATIC_ROOT}/{path}", dirs_exist_ok=True)
+    # img_list = [ path+i for i in  os.listdir(path) if not i.endswith('.md')]
+    store_name = request.session.get('STORE_NAME')
     
-    return render(request,'retailDisplay.html',context={"store_name":settings.STORE_NAME, "display_images":img_list})
+    return render(request,'retailDisplay.html',context={"store_name":store_name})
 
 
 @login_required(login_url="/user/login/")
@@ -252,11 +455,38 @@ def report_regular(request,start_date,end_date):
     date_group.rename(columns = { 'qty':'Quantity','total_pre_sales':'Total Pre_Sales','tax_amount':'Total Tax',
             'deposit_amount':'Total Deposit','total_sales':'Total Sales'}, inplace = True)
     date_group.index.names = ['Date','Department','Payment Type',]
+    store_name = request.session.get('STORE_NAME')
 
     return render(request,"reportsRegular.html", context={
             "table_html":date_group.to_html(classes= "table table-bordered table-hover h6 text-gray-900 border-5"),
-            "start_date":start_date,"end_date":end_date,"store_name":settings.STORE_NAME,
+            "start_date":start_date,"end_date":end_date,"store_name":store_name,
             })
+
+@login_required(login_url="/user/login/")
+def dashboard(request):
+    # Filter active users     
+    active_users = User.objects.filter(is_active=True)
+ 
+    # Filter inactive users
+    inactive_users = User.objects.filter(is_active=False)
+ 
+    # Get all clients with their associated user count and active user count
+    clients = Client.objects.annotate(user_count=Count('users')).order_by('client_name')
+    # Get clients with only active users
+ 
+    # Prepare data for the bar graph
+    client_names = [client.client_name for client in clients]
+    total_users = [client.user_count for client in clients]
+ 
+    context = {
+        'active_users': active_users,
+        'inactive_users': inactive_users,
+        'clients': clients,  # All clients with the total user count
+        'client_names': client_names,
+        'total_users': total_users,
+    }
+ 
+    return render(request, "dashboard.html", context)
 
 
 @login_required(login_url="/user/login/")
@@ -271,7 +501,11 @@ def dashboard_products(request):
         for i, df in df.groupby('department'):
             context['products_group'][i] = df.groupby(["barcode","name"])[["qty"]].sum().reset_index().sort_values(by=["qty"],ascending=False).iloc[:number].to_dict('records')
 
-        context['low_inventory_products'] = product.objects.all().order_by('qty').values('barcode','name','qty')[:50]
+        # Fetching least 50 products (50 Products with lowest quantity) 
+        # context['low_inventory_products'] = product.objects.all().order_by('qty').values('barcode','name','qty')[:50]
+
+        # Fetching low inventory products (less than 100 qty)
+        context['low_inventory_products'] = product.objects.filter(qty__lt=100).order_by('qty').values('barcode', 'name', 'qty')[:50]
         context['number'] = number
     except:
         return redirect("/register/")
@@ -340,7 +574,13 @@ def dashboard_department(request):
 
 @login_required(login_url="/user/login/")
 def dashboard_sales(request):
-    print("Dashboard view is loading...")  # Debugging message
+    if request.user.roles == 'posuser':
+        return redirect("/register/")
+    if request.user.roles == 'inventoryuser':
+        return redirect("/inventory/")
+    if request.user.is_superuser == True:
+        return redirect("/dashboard/")
+    # print("Dashboard view is loading...")  # Debugging message
 
     context = {}
     tz = pytz.timezone('US/Eastern')  # Adjust timezone as per your location
@@ -351,44 +591,44 @@ def dashboard_sales(request):
 
     try:
         # Debugging: Check what today_date looks like
-        print(f"today_date (timezone aware): {today_date}")
+        # print(f"today_date (timezone aware): {today_date}")
 
         # Fetch transactions and product transactions from the database
         transactions = transaction.objects.filter(date_time__gte=today_date)  # Using date_time instead of transaction_dt
         
         # Debugging: Check if transactions are returned
-        print(f"Transactions query: {transactions}")
-        print(f"Transactions count: {transactions.count()}")
+        # print(f"Transactions query: {transactions}")
+        # print(f"Transactions count: {transactions.count()}")
 
         # Fetch product transactions (filtered by the date)
         productTransactions = productTransaction.objects.filter(transaction_date_time__date__gte=today_date.date())
 
         # Debugging: Check if any product transactions are returned
-        print(f"Product Transactions query: {productTransactions}")
-        print(f"Product Transactions count: {productTransactions.count()}")
+        # print(f"Product Transactions query: {productTransactions}")
+        # print(f"Product Transactions count: {productTransactions.count()}")
 
         # Check if there are no transactions
         if not transactions.exists():
-            print("No transactions found for the given date range.")  # Debugging message
+            # print("No transactions found for the given date range.")  # Debugging message
             context['error'] = "No sales data available for the selected period."
             return render(request, "salesDashboard.html", context)
 
         # Process transactions data into DataFrame
         df = pd.DataFrame(transactions.values())
         if df.empty:
-            print("DataFrame is empty.")  # Debugging message
+            # print("DataFrame is empty.")  # Debugging message
             context['error'] = "No valid data found in the database."
             return render(request, "salesDashboard.html", context)
 
         # Debugging: Check the first few rows of the dataframe
-        print(f"Processed transactions DataFrame:\n{df.head()}")
+        # print(f"Processed transactions DataFrame:\n{df.head()}")
 
         # Apply timezone conversion to date_time and create 'date' column
         df['date_time'] = df['date_time'].apply(lambda x: x.astimezone(tz))  # Using date_time here instead of transaction_dt
         df['date'] = df['date_time'].dt.date  # Extract date part
 
         # Debugging: Print the first few rows to verify the data
-        print(f"Processed transactions with 'date' column:\n{df.head()}")
+        # print(f"Processed transactions with 'date' column:\n{df.head()}")
 
         # Group by 'date' and sum the total sales
         df_date = df.groupby('date')['total_sale'].sum()
@@ -401,7 +641,7 @@ def dashboard_sales(request):
         df_date = df_date.asfreq('D', fill_value=0)
 
         # Debugging: Print the sales data by date
-        print(f"Sales data by date:\n{df_date.head()}")
+        # print(f"Sales data by date:\n{df_date.head()}")
 
         # Profit/Loss calculation for product transactions
         product_df = pd.DataFrame(productTransactions.values())
@@ -414,14 +654,14 @@ def dashboard_sales(request):
             total_profit_or_loss = profit_loss_by_date.sum()
 
             # Debugging: Print the profit/loss data
-            print(f"Profit/Loss by date:\n{profit_loss_by_date.head()}")
+            # print(f"Profit/Loss by date:\n{profit_loss_by_date.head()}")
 
             # Add profit information to context
             context['profit_today'] = profit_loss_by_date.get(today_date.date(), 0)
             context['profit_last_30_days'] = profit_loss_by_date[profit_loss_by_date.index > (today_date - timedelta(30)).date()].sum()
             context['profit_or_loss'] = total_profit_or_loss
         else:
-            print("No product transactions found.")  # Debugging message
+            # print("No product transactions found.")  # Debugging message
             context['profit_today'] = 0
             context['profit_last_30_days'] = 0
             context['profit_or_loss'] = 0
@@ -440,7 +680,7 @@ def dashboard_sales(request):
         }
 
         # Debugging: Print the sales breakdown
-        print(f"Sales breakdown info:\n{context['add_info']}")
+        # print(f"Sales breakdown info:\n{context['add_info']}")
 
         # Plotly: 30 Days Sales Chart
         fig = px.bar(
@@ -474,31 +714,161 @@ def dashboard_sales(request):
             fig2.update_layout(margin=dict(b=10, pad=0, t=10))
             context['day_payment_graph'] = po.plot(fig2, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
         else:
-            print("No payment data found for today.")  # Debugging message
+            # print("No payment data found for today.")  # Debugging message
             context['error'] = "No payment data available for today."
 
     except Exception as e:
-        print(f"Error in dashboard_sales view: {e}")  # Debugging message
+        # print(f"Error in dashboard_sales view: {e}")  # Debugging message
         context['error'] = f"An error occurred while generating the sales dashboard: {str(e)}"
         return render(request, "salesDashboard.html", context)
+    
 
     return render(request, "salesDashboard.html", context)
 
 
+@login_required(login_url="/user/login/")
+def profit_loss_dashboard(request):
+    context = {}
+    tz = pytz.timezone('US/Eastern')  # Adjust timezone as per your location
+ 
+    # Get today's date, ensure it's timezone-aware
+    today = datetime.now(tz).date()
+    last_30_days = today - timedelta(days=30)
+ 
+    try:
+        # Fetch product transactions for the last 30 days
+        product_transactions = productTransaction.objects.filter(transaction_date_time__date__gte=last_30_days)
+ 
+        if not product_transactions.exists():
+            context['error'] = "No product transactions available for the selected period."
+            return render(request, "profitLossDashboard.html", context)
+ 
+        # Convert transactions to DataFrame
+        product_df = pd.DataFrame(product_transactions.values())
+        if product_df.empty:
+            context['error'] = "No valid product transaction data found."
+            return render(request, "profitLossDashboard.html", context)
+ 
+        # Calculate Profit or Loss for each transaction
+        product_df['Profit_or_Loss'] = (product_df['sales_price'] - product_df['cost_price']) * product_df['qty']
+        product_df['date'] = product_df['transaction_date_time'].apply(lambda x: x.astimezone(tz).date())
+ 
+        # Aggregate Profit/Loss by date
+        profit_loss_by_date = product_df.groupby('date')['Profit_or_Loss'].sum()
+       
+        # Get summary values
+        context['profit_today'] = profit_loss_by_date.get(today, 0)
+        context['profit_last_30_days'] = profit_loss_by_date.tail(30).sum()
+        context['profit_or_loss'] = profit_loss_by_date.sum()
+ 
+        # Create Plotly bar chart
+        profit_loss_chart = px.bar(
+            profit_loss_by_date.reset_index(), x='date', y='Profit_or_Loss',
+            labels={"date": "Date", "Profit_or_Loss": "Profit/Loss ($)"}, title="Daily Profit/Loss"
+        )
+ 
+        # Update chart to color bars based on profit or loss
+        profit_loss_chart.update_traces(
+            marker_color=profit_loss_by_date.apply(lambda x: 'green' if x > 0 else 'red')
+        )
+ 
+        # Render chart as HTML div
+        context['profit_loss_graph'] = po.plot(profit_loss_chart, auto_open=False, output_type='div', config={'displayModeBar': False})
+   
+    except Exception as e:
+        context['error'] = f"An error occurred while generating the Profit and Loss chart: {str(e)}"
+ 
+    return render(request, "profitLossDashboard.html", context)
+ 
+@api_view(['POST']) 
+@login_required(login_url="/user/login/")
+def add_displayed_item(request):
+    barcode = request.data.get('barcode')
+    variable_price = False
+    if barcode:
+        # Add the item to the displayed_items table
+        item = displayed_items.objects.create(
+            barcode=barcode,
+            display_name=request.data.get('display_name', ''),
+            variable_price = variable_price
+        )
+        return Response({'message': 'Item added successfully.'}, status=200)
+    return Response({'error': 'Invalid data.'}, status=400)
+
+
+@api_view(['POST'])  
+@login_required(login_url="/user/login/")
+def remove_displayed_item(request):
+    barcode = request.data.get('barcode')
+    try:
+        item = displayed_items.objects.get(barcode=barcode)
+        item.delete()
+        return Response({'message': 'Item removed successfully.'}, status=200)
+    except displayed_items.DoesNotExist:
+        return Response({'error': 'Item not found.'}, status=404)
+
+
 def user_login(request):
+    store_name = 'Default'
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
         user = authenticate(username=username, password=password)
         if user is not None:
-            login(request, user)
-            request.session["Total"] = 0.00
-            request.session["Tax_Total"] = 0.00
-            return redirect('home')
+            current_domian = request.get_host().split(':')[0]
+
+            try:
+                # Fetch the domain associated with the first client in the session
+                if user.deleted_on is None:
+                    
+                    logindomain = Domain.objects.get(domain = current_domian)
+                    user = user  # Get the currently logged-in user
+                    if logindomain.tenant_id in user.clients.values_list('client_id', flat=True):
+                        login(request, user)
+                        # Save clients to session
+                        request.session['clients'] = list(user.clients.values_list('client_id', 'client_name'))
+
+                        if request.session.get('clients'):
+                            # Get the first client_id from the session
+                            first_client_id = request.session['clients'][0][0]
+                            request.session['selected_client'] = first_client_id
+                            client_data = Client.objects.get(client_id = first_client_id)
+                            # request.session['logo'] = client_data.client_logo
+                            request.session['logo'] = client_data.client_logo.url if client_data.client_logo else 'None'
+                            # request.session['current_client'] = client_data.client_name
+                            request.session['currency'] = client_data.client_currency
+                            request.session['STORE_NAME'] = client_data.client_name
+                            request.session['STORE_ADDRESS'] = client_data.client_address
+                            request.session['STORE_PHONE'] = client_data.client_contact
+                            store_name = request.session.get('STORE_NAME')
+
+
+                            # Fetch the domain for the first client
+                            first_client = user.clients.get(client_id=first_client_id)
+                            domain = Domain.objects.get(tenant_id=first_client.client_id)
+                            
+                            # Store the domain's relevant data in the session (e.g., domain name)
+                            request.session['hostname'] = domain.domain
+                            # print(f"First client domain: {domain.domain}")
+
+                        # print('\n \n \n Clients in Session ', request.session['clients'])
+                        request.session["Total"] = 0.00
+                        request.session["Tax_Total"] = 0.00
+                        return redirect('home')
+                    else:
+                        # User doesn't have access to this tenant
+                        return render(request, 'registration/login.html', context={'error': 'You do not have access to this tenant.', "store_name": store_name})
+
+                else:
+                    return render(request, 'registration/login.html', context={'error': True, "store_name": store_name})
+
+            except Domain.DoesNotExist:
+                # Domain is not found in the database
+                return render(request, 'registration/login.html', context={'error': 'Invalid domain.', "store_name": store_name})
         else:
-            return render(request, 'registration/login.html',context={'error':True,"store_name":settings.STORE_NAME})
+            return render(request, 'registration/login.html', context={'error': True, "store_name": store_name})
     else:
-        return render(request, 'registration/login.html',context={"store_name":settings.STORE_NAME},)
+        return render(request, 'registration/login.html', context={"store_name": store_name})
 
 # forgot password
 def user_forgot_password(request):
@@ -509,7 +879,7 @@ def user_forgot_password(request):
             try:
                 user = User.objects.get(email=email)
                 send_otp_email(user)
-                return redirect('verify_otp', uidb64=user.id)
+                return redirect('verify_otp', uidb64=user.user_id)
             except User.DoesNotExist:
                 return render(request, 'registration/forgot_password.html', {'form': form, 'error': 'User not found'})
     else:
@@ -547,14 +917,14 @@ def generate_otp():
 # Verifies the otp entered by user is correct & is not expired
 def verify_otp(request, uidb64):
     try:
-        user = User.objects.get(id=uidb64)
+        user = User.objects.get(user_id=uidb64)
         if request.method == "POST":
             otp_form = OTPForm(request.POST)
             if otp_form.is_valid():
                 otp = otp_form.cleaned_data['otp']
                 if user.profile.otp == otp and not user.profile.is_otp_expired():
                     # OTP is valid, let the user reset the password
-                    return redirect('reset_password', uidb64=urlsafe_base64_encode(str(user.id).encode()))
+                    return redirect('reset_password', uidb64=urlsafe_base64_encode(str(user.user_id).encode()))
                 else:
                     return HttpResponse("Invalid OTP or OTP expired.")
         else:
@@ -567,7 +937,7 @@ def verify_otp(request, uidb64):
 # Allows to reset the password
 def reset_password(request, uidb64):
     try:
-        user = User.objects.get(id=urlsafe_base64_decode(uidb64).decode())
+        user = User.objects.get(user_id=urlsafe_base64_decode(uidb64).decode())
         if request.method == "POST":
             form = SetPasswordForm(user, request.POST)
             if form.is_valid():
@@ -588,5 +958,6 @@ def password_reset_complete(request):
 @login_required(login_url="/user/login/")
 def user_logout(request):
     logout(request)
-    return render(request, 'registration/login.html',context={'logout':True})
+    return redirect('/user/login/')
+    # return render(request, 'registration/login.html',context={'logout':True})
 

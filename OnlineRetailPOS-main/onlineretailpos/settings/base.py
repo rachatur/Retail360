@@ -24,27 +24,35 @@ CART_SESSION_ID = 'cart'
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 
-# Application definition
-INSTALLED_APPS = [
-    # "admin_interface", #Interface if Admin Port Customization is needed
-    "colorfield",
-    'onlineretailpos.admin.MyAdminConfig',#'django.contrib.admin',
-    'django.contrib.auth',
+SHARED_APPS = [
+    'django_tenants',  
+    'IDENTITY', 
+    'onlineretailpos.admin.MyAdminConfig',
     'django.contrib.contenttypes',
+    'django.contrib.auth',
     'django.contrib.sessions',
+    'django.contrib.sites',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "colorfield",
     'jquery',
     'mathfilters',
-    'inventory',
-    'transaction',
-    'cart',
     'import_export',
     'rangefilter',
     'django_admin_logs',
+    'rest_framework',
 ]
 
+TENANT_APPS = [
+    'inventory',
+    'transaction',
+    'cart',
+]
+
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
 MIDDLEWARE = [
+    'IDENTITY.middleware.DomainMiddleware', #custom middleware to get allowed hosts
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -52,6 +60,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_tenants.middleware.TenantMiddleware',
+    'IDENTITY.middleware.CustomTenantMiddleware', #custom middleware to allow superuser and supportusers access to all
 ]
 
 X_FRAME_OPTIONS = "SAMEORIGIN"
@@ -105,6 +115,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTH_USER_MODEL = 'IDENTITY.User'
+
+LOGIN_URL = '/user/login/'
+LOGOUT_REDIRECT_URL = '/user/login/'
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
@@ -120,8 +135,8 @@ USE_TZ = True
 STATIC_ROOT = os.path.join(BASE_DIR,'static')
 STATIC_URL = f"/static/"
 STATICFILES_DIRS = (os.path.join(PROJECT_DIR,'static'),)
-# MEDIA_URL = 'media/'
-# MEDIA_ROOT = Path.joinpath(PROJECT_DIR, "media/")
+MEDIA_URL = 'media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # # Assets Management
 # ASSETS_ROOT = Path.joinpath(STATIC_ROOT,'assets/')
 
@@ -130,4 +145,8 @@ STATICFILES_DIRS = (os.path.join(PROJECT_DIR,'static'),)
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
+# STATICFILES_DIRS = [
+#     BASE_DIR / "static",  # This assumes a 'static' directory at the root of your project
+#     # Alternatively, if you want to keep your static folder inside PROJECT_DIR
+#     os.path.join(PROJECT_DIR, 'static'),  # Additional static files directory at the root of your project
+# ]

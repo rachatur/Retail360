@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ client.client_name }} Dashboard</title>
+
+    <!-- Link to static CSS -->
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <script src="{% static 'js/scripts.js' %}"></script>
+
+    <!-- Apply theme styles dynamically -->
+    <style>
+        body {
+            background-color: {% if theme %}{{ theme.primary_color }}{% else %}#ffffff{% endif %};
+            color: {% if theme %}{{ theme.secondary_color }}{% else %}#000000{% endif %};
+            font-family: {% if theme %}{{ theme.font_family }}{% else %}"Arial, sans-serif"{% endif %};
+        }
+
+        /* Apply custom CSS if available */
+        {% if theme and theme.custom_css %}
+        {{ theme.custom_css|safe }}
+        {% endif %}
+
+        /* Optional: Customize header or footer if logo URL is available */
+        .logo {
+            width: 150px;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <!-- Display the client logo if available -->
+        {% if theme and theme.logo_url %}
+        <img src="{{ theme.logo_url }}" alt="{{ client.client_name }} Logo" class="logo">
+        {% endif %}
+        <h1>Welcome to {{ client.client_name }}'s Dashboard</h1>
+    </header>
+
+    <main>
+        <p>This page is styled using the active theme for {{ client.client_name }}.</p>
+        <p>Primary Color: {{ theme.primary_color if theme else "Default" }}</p>
+        <p>Secondary Color: {{ theme.secondary_color if theme else "Default" }}</p>
+        <p>Font Family: {{ theme.font_family if theme else "Arial, sans-serif" }}</p> 
+    </main>
+
+    <footer>
+        <p>Footer Content</p>
+    </footer>
+
+    <!-- JavaScript for interactivity -->
+    <script>
+        // Example: Change background color on click (if theme is applied)
+        document.body.addEventListener('click', function() {
+            {% if theme %}
+            document.body.style.backgroundColor = "{{ theme.secondary_color }}";
+            {% endif %}
+        });
+    </script>
+</body>
+</html>

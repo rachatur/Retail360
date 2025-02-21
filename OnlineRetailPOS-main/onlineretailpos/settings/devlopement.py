@@ -6,51 +6,31 @@ load_dotenv()
 
 ip_address = socket.gethostbyname(socket.gethostname())
     
-DEBUG = True
-SECRET_KEY = os.getenv('SECRET_KEY_DEV', 'django_dev_secret_key_online-retail-pos-1234')
+DEBUG = False
+SECRET_KEY = os.getenv('SECRET_KEY_DEV', 'c8ycr*3pl5tm62weh4h6+r3wgy+6*&o*d+qkdxw2s^3fay*wd=')
 
-ALLOWED_HOSTS = [ip_address,'127.0.0.1']
-CSRF_TRUSTED_ORIGINS = [f"http://{ip_address}","http://127.0.0.1"]
 
-print(f"Connect on this address:") # get the ip address from the command line.
-print(f"http://127.0.0.1:8000")
-print(f"{ip_address}:8000 \nDocker Container may have different IP, VPN will screw IP address as well\nMight not work on those cases")
-
-# # Database sqllite
-# # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
-database_dict = {
-    'sqlite' :  {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3', 
-        } ,
-    'postgres' : {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME', "OnlineRetailPOS"),  # Use environment variable DB_NAME, defaulting to 'default_db_name'
-            'USER': os.getenv('DB_USERNAME'),  # Use environment variable DB_USERNAME
-            'PASSWORD': os.getenv('DB_PASSWORD'),  # Use environment variable DB_PASSWORD
-            'HOST': os.getenv('DB_HOST', "localhost"),  # Use environment variable DB_HOST
-            'PORT': os.getenv('DB_PORT', ''),  # By default, PostgreSQL uses port 5432
-        } ,
-    'mysql': {
-            'ENGINE': 'django.db.backends.mysql',
-            'NAME': os.getenv('DB_NAME', "OnlineRetailPOS"),  # Use environment variable DB_NAME
-            'USER': os.getenv('DB_USERNAME'),  # Use environment variable DB_USERNAME
-            'PASSWORD': os.getenv('DB_PASSWORD'),  # Use environment variable DB_PASSWORD
-            'HOST': os.getenv('DB_HOST', "localhost"),  # Use environment variable DB_HOST
-            'PORT': os.getenv('DB_PORT', ''),  
-            'OPTIONS':{
-                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
-                }
-    }
-}
-
-print(f"Database configuration is set to {database_dict[os.getenv('NAME_OF_DATABASE', 'sqlite')]['ENGINE']}")
+ALLOWED_HOSTS = ["103.86.176.184","*.103.86.176.184","subdomain.103.86.176.184","posretail360.com","www.posretail360.com","*.posretail360.com"]
+CSRF_TRUSTED_ORIGINS = [f"http://{ip_address}","http://127.0.0.1","http://localhost",f"https://*.{ip_address}",f"https://{ip_address}","http://posretail360.com","https://posretail360.com","http://*.posretail360.com","https://*.posretail360.com"]
 
 DATABASES = {
-    'default':  database_dict[os.getenv('NAME_OF_DATABASE', 'sqlite')]
+    # 'default':  database_dict[os.getenv('NAME_OF_DATABASE', 'sqlite')]
+    'default':{
+    # 'ENGINE': 'django.db.backends.postgresql',
+    'ENGINE': 'django_tenants.postgresql_backend',
+    'NAME': "OnlineRetailPOS",  # Use environment variable DB_NAME, defaulting to 'default_db_name'
+    'USER': "postgres",  # Use environment variable DB_USERNAME
+    'PASSWORD': "1234",  # Use environment variable DB_PASSWORD
+    'HOST': "localhost",  # Use environment variable DB_HOST
+    'PORT': "5432",  
+    }
     
 }
 
+DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
+
+TENANT_MODEL = "IDENTITY.Client"  # Path to your Client model
+TENANT_DOMAIN_MODEL = "IDENTITY.Domain"  # Path to your Domain model
 
 ## COMMENT/UNCOMMENT to switch from  sqllite file to regular cloud database, configuration may differ
 ##  Database Connection
@@ -65,53 +45,19 @@ DATABASES = {
 # )
 # ssh_tunnel.start()
 
-## Database MySQL
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': os.getenv('DB_NAME'),
-#         'USER' : os.getenv('DB_USERNAME'),
-#         'PASSWORD' : os.getenv('DB_PASSWORD'),
-#         'HOST': "127.0.0.1",
-#         'PORT' : ssh_tunnel.local_bind_port,
-#         'OPTIONS':{
-#              'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
-#             }
-#     }
-# }
-
 
 # Store Information
-# For Line Break add \n
-#Can not be more than (RECEIPT_CHAR_COUNT - 2) Characters per line(\n), if wants to add more break it up by \n new line
 RECEIPT_CHAR_COUNT = int(os.getenv('RECEIPT_CHAR_COUNT', 32)) 
-STORE_NAME = os.getenv('STORE_NAME', "STORE NAME")  #Can not be more than RECEIPT_CHAR_COUNT 
-STORE_ADDRESS = os.getenv('STORE_ADDRESS', "STORE ADDRESS")
-STORE_PHONE = os.getenv('STORE_PHONE', "")
-RECEIPT_HEAD = f"{STORE_NAME}\n{STORE_ADDRESS}"  
-RECEIPT_HEAD = RECEIPT_HEAD + f"\n{STORE_PHONE}" if os.getenv('Include_Phone_In_Heading',"False").lower() == "true" else RECEIPT_HEAD
 RECEIPT_ADDITIONAL_HEADING = os.getenv('RECEIPT_ADDITIONAL_HEADING', "")
-RECEIPT_HEADER = f"{RECEIPT_HEAD}\n{RECEIPT_ADDITIONAL_HEADING}" if RECEIPT_ADDITIONAL_HEADING != "" else RECEIPT_HEAD
 RECEIPT_FOOTER = os.getenv('RECEIPT_FOOTER',"Thank You")
 
 
 # Printer Settings
 PRINTER_VENDOR_ID = os.getenv('PRINTER_VENDOR_ID', "")
 PRINTER_PRODUCT_ID = os.getenv('PRINTER_PRODUCT_ID', "")
-PRINT_RECEIPT = os.getenv('PRINT_RECEIPT', False)
+PRINT_RECEIPT = os.getenv('PRINT_RECEIPT', True)
 CASH_DRAWER = os.getenv('CASH_DRAWER', False)
 
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'  # or another SMTP provider
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'retail360assist@gmail.com'
-# EMAIL_HOST_PASSWORD = 'Account@1234'
-
-# # Or use console backend for local development to see the email in the console
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# # You can define the subject and message for the password reset email.
-# PASSWORD_RESET_TIMEOUT_DAYS = 1  # The link expires in 1 day
 
 # For actual email sending, use Gmail's SMTP
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -120,7 +66,6 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'retail360assist@gmail.com'  # Your Gmail address
-# EMAIL_HOST_PASSWORD = 'Account@1234'  # Your Gmail password or App Password (see below)
 EMAIL_HOST_PASSWORD = 'gzfo ttbj deud zaoj'  # Your Gmail password or App Password (see below)
 DEFAULT_FROM_EMAIL = 'retail360assist@gmail.com'
 

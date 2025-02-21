@@ -18,11 +18,19 @@ Register | Online Retail POS
         box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
         z-index: 10;
     }
+    #customerform{
+            top:18%;
+            left: 7.5%;
+    }
 
     /* Custom breakpoints for responsive width */
     @media screen and (max-width: 1000px) {
         .customer_results {
             width: 30%;
+        }
+        #customerform{
+            top:13%;
+            left: 2.5%;
         }
     }
 
@@ -30,29 +38,52 @@ Register | Online Retail POS
         .customer_results {
             width: 50%;
         }
+        #customerform{
+            top:13%;
+            left: 2.5%;
+        }
     }
 
     @media screen and (max-width: 500px) {
         .customer_results {
             width: 100%;
         }
+        #customerform{
+            top:13%;
+            left: 5.5%;
+        }
     }
 </style>
 <div style="width: 90%; font-size: 13px;" >
     <input type="hidden" name="customer_id" id="customer_id" value="{{ request.session.customer_id }}">
-    <input type="hidden" name="customer_email" id="customer_email" value="{{ request.session.customer_id }}">
-    <input type="hidden" name="customer_address" id="customer_address" value="{{ request.session.customer_id }}">
-    <input type="number" name="customer_number" id="customer_number" placeholder="Customer Contact" value="{{ request.session.customer_number }}" required>
-    <input type="text" name="customer_name" id="customer_name" placeholder="Customer Name" value="{{ request.session.customer_name }}">
-    <a class="nav-link collapsed" onclick="getCustomers()" style="display: inline-flex; align-items: center;">
-        <i class="fas fa-fw fa-search"></i>
-    </a>
-    <!-- <a class="nav-link collapsed" onclick="EditCustomerForm()" style="display: inline-flex; align-items: center;">
-        <i class="fas fa-fw fa-edit"></i>
-    </a> -->
-    <div id="customer-results" class="customer_results w-25 position-absolute"></div>
+    <input type="hidden" name="customer_email" id="customer_email" value="{{ request.session.customer_email }}">
+    <input type="hidden" name="customer_address" id="customer_address" value="{{ request.session.customer_address }}">
+    <div style="display: flex; align-items: center; gap: 10px; flex-direction: row; flex-wrap: wrap; ">
+        <div>
+            <label for="customer_number"><strong style="color:black;width:100%;padding-right: 15px;padding-left: 10px; font-size: 16px;">Customer Contact :</strong></label> <br>
+            <input type="number" name="customer_number" id="customer_number" onblur="saveCustomerDataToSession(); getCustomers()" value="{{ request.session.customer_number }}" required style="width: 275px; height: 30px;"> 
+        </div>
+        <div>
+            <label for="customer_number"><strong style="color:black;width:100%;padding-right: 15px;padding-left: 10px; font-size: 16px;">Customer Name :</strong></label>  <br>
+            <input type="text" name="customer_name" id="customer_name" onblur="saveCustomerDataToSession(); getCustomers()" value="{{ request.session.customer_name }}" style="width: 275px; height: 30px;"> 
+            <a class="nav-link collapsed" onclick="getCustomers()" style="display: inline-flex; align-items: center; cursor: pointer;">
+                <i class="fas fa-fw fa-search"></i>
+            </a>
+            <a class="nav-link collapsed" onclick="EditCustomerForm()" style="display: inline-flex; align-items: center; cursor: pointer;">
+                <i class="fas fa-fw fa-edit"></i>
+            </a>
+            <a class="nav-link collapsed" onclick="resetCustomerData()" style="display: inline-flex; align-items: center; cursor: pointer;">
+                <i class="fas fa-fw fa-times-circle"></i>
+            </a>
+        </div>
+    </div>
+    
+    <div id="customer-results" class="customer_results w-25 position-absolute" style="cursor: pointer;"></div>
 </div>
+
 <hr>
+
+
 <div class="row" style="width: 100%;padding-right: 0px;">
     <div class="col-lg-6">
         <div class="row mb-0" style="padding-bottom:5px;">
@@ -65,7 +96,10 @@ Register | Online Retail POS
                     <ul style="padding-left:25px;width:300px;"><strong style="color:black;width:100%;padding-right: 15px;padding-left: 10px;">{{ field.label }} :</strong> {{ field }}</ul>
                     {% endfor %}
                 </div>
-                <input class="btn btn-primary"  style="width:100%;margin-top: 10px;" id="submit-barcode" type="submit" value="Submit">
+                <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 10px;">
+                    <input class="btn btn-primary" style="width: 48%;margin-top: 10px;" id="cancel-button" type="button" value="Clear">
+                    <input class="btn btn-primary"  style="width:48%;margin-top: 10px;" id="submit-barcode" type="submit" value="Submit">
+                </div>
             </form>
 
             <!-- Transaction Info / Billing Info -->
@@ -85,56 +119,69 @@ Register | Online Retail POS
                                 <strong>Total : </strong></div>
                             <div class="h3 mb-0 font-weight-bold text-gray-800" style="text-align:right;" >{{ total|floatformat:2 }}</div>
                         </div>
-                        <!-- <div class="col-auto">
-                            <i class="fas fa-dollar-sign fa-3x text-gray-300"></i>
-                        </div> -->
+                        <div class="col-auto">
+                            <!-- <i class="fas fa-{{request.session.currency}}-sign fa-3x text-gray-300"></i> -->
+                            <i class="fa fa-{{request.session.currency}} fa-3x text-gray-300"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Cart / list of products  -->
-        <div class="row mb-2" id="cart_display"  style="padding-top: 10px; padding-bottom: 0px;">
-            {% if no_product %}
-            <div class="loginPopup" id='popup'>
-                <div class="formPopup" id="popupForm" style="display:block">
-                    <div class="formContainer">
-                        <div class="h3 mb-5 text-gray-800"> Product Not Found, Please add Product in Inventory </div>
-                        <button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-            <div class="card shadow-sm" style="width:100%;height:465px;">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Transaction Details</h6>
-                </div>
-                <div class="card-body" style="overflow: auto ;padding:0">
-                    <table class="table" style="text-align:right;">
-                        <tr>
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)" >Barcode/Product Name</th>
-                            <!-- <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">Name</th> -->
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">Qty</th>
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">Price</th>
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">L-Total<br>Tax</th>
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">L-Total<br>Deposit</th>
-                            <th style="font-family: bold;color:rgba(0, 0, 0, 0.623)">Line<br>Total</th>
-                        </tr>
-                        {% for key, value in cart.items %}
-                        <tr>
-                            <th style="text-align:left">{{key}} <br> {{value.name}}</th>
-                            <!-- <td>{{value.name}}</td> -->
-                            <td>{{value.quantity}}</td>
-                            <td>{{value.price}}</td>
-                            <td>{{value.tax_value}}</td>
-                            <td>{{value.deposit_value}}</td>
-                            <td>{{value.line_total}}</td>
-                        </tr>
-                        {% endfor %}
-                    </table> 
-                </div>
+<!-- Cart / list of products -->
+<div class="row mb-2" id="cart_display" style="padding-top: 10px; padding-bottom: 0px;">
+    {% if no_product %}
+    <div class="loginPopup" id="popup">
+        <div class="formPopup" id="popupForm" style="display:block">
+            <div class="formContainer">
+                <div class="h3 mb-5 text-gray-800">Product Not Found, Please add Product in Inventory</div>
+                <button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button>
             </div>
         </div>
+    </div>
+    {% endif %}
+    
+    <div class="card shadow-sm" style="width:100%; height:465px;">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Transaction Details</h6>
+        </div>
+        <div class="card-body" style="overflow: auto; padding:0;">
+            <table class="table" style="text-align:right;">
+                <tr>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">Barcode/Product Name</th>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">Qty</th>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">Price</th>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">L-Total<br>Tax</th>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">L-Total<br>Deposit</th>
+                    <th style="font-family: bold; color:rgba(0, 0, 0, 0.623)">Line<br>Total</th>
+                    <th></th> <!-- Column for Remove button -->
+                </tr>
+                {% for key, value in cart.items %}
+                <tr id="cart-item-{{key}}">
+                    <td style="text-align:left; position: relative; padding-left: 50px;">
+                        <!-- Add the remove button here before the product name with some spacing -->
+                        <button 
+                            onclick="removeProductFromCart('{{key}}')" 
+                            class="btn btn-danger btn-sm remove-item" 
+                            style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); padding: 5px 10px; 
+                                   font-size: 16px; color: red; background-color: white; 
+                                   transition: all 0.3s ease; border: none; outline: none; cursor: pointer;">
+                            <i class="fas fa-times" aria-hidden="true"></i>
+                        </button>
+                        <span style="margin-left: 10px;">{{key}}</span> <br>
+                        <span style="display: block; margin-left: 10px; margin-top: 5px;">{{value.name}}</span>
+                    </td>
+                    <td style="text-align:center; padding: 10px;">{{value.quantity}}</td>
+                    <td style="text-align:right; padding: 10px;">{{value.price}}</td>
+                    <td style="text-align:right; padding: 10px;">{{value.tax_value}}</td>
+                    <td style="text-align:right; padding: 10px;">{{value.deposit_value}}</td>
+                    <td style="text-align:right; padding: 10px;">{{value.line_total}}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+</div>
     </div>
     <!-- Transaction Buttons  -->
     <div class="col-lg-6" >
@@ -148,32 +195,81 @@ Register | Online Retail POS
         <hr >
         <!-- Transaction Checkout buttons -->
         <div class="btn-block" style="padding-top: 10px;text-align:center" >
-            <button id="disable_P_1" onclick="if (validateCustomerNumber()) { return window.open('/endTransaction/card/DEBIT_CREDIT/',target='_self'); }" class="btn btn-success" style="width:23%;height:60px; margin:2px;margin-bottom:5px;background-color:darkgreen" > Debit/<br>Credit </button>            
-            <button id="disable_P_2" onclick="if (validateCustomerNumber()) { endTransactionCash(5,'{{ total }}'); }" class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px"> $5 </button>
-            <button id="disable_P_3" onclick="if (validateCustomerNumber()) { endTransactionCash(10,'{{ total }}'); }" class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px"> $10 </button>
-            <button id="disable_P_4" onclick="if (validateCustomerNumber()) { endTransactionCash('Next','{{ total }}'); }" class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px;background-color:rgb(27, 66, 27)"> Next<br>Dollar </button>
-            <button id="disable_P_5" onclick="if (validateCustomerNumber()) { return window.open('/endTransaction/card/EBT/',target='_self'); }" class="btn btn-success" style="width:23%;margin: 2px;height:60px;margin-bottom:5px;background-color:darkgreen"> UPI </button>
-            <button id="disable_P_6" onclick="if (validateCustomerNumber()) { endTransactionCash(20,'{{ total }}'); }" class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px" > $20 </button>
-            <button id="disable_P_7" onclick="if (validateCustomerNumber()) { endTransactionCash(50,'{{ total }}'); }" class="btn btn-success" style="width:23%;margin: 2px;height:60px;margin-bottom:5px"> $50 </button>
-            <button id="disable_P_8" onclick="if (validateCustomerNumber()) { endTransactionCash('CASH','{{ total }}'); }" class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px;background-color:rgb(27, 66, 27)"> CASH </button>
+            <button id="disable_P_1" onclick=" return window.open('/endTransaction/card/DEBIT_CREDIT/',target='_self'); " class="btn btn-success" style="width:23%;height:60px; margin:2px;margin-bottom:5px;background-color:darkgreen" > Debit/<br>Credit </button>            
+            <button id="disable_P_2" onclick=" endTransactionCash(5,'{{ total }}'); " class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px"> 5 </button>
+            <button id="disable_P_3" onclick=" endTransactionCash(10,'{{ total }}'); " class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px"> 10 </button>
+            <button id="disable_P_4" onclick=" endTransactionCash('Next','{{ total }}'); " class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px;background-color:rgb(27, 66, 27);text-transform: capitalize;"> Next<br>{{request.session.currency}} </button>
+            <button id="disable_P_5" onclick=" return window.open('/endTransaction/card/EBT/',target='_self'); " class="btn btn-success" style="width:23%;margin: 2px;height:60px;margin-bottom:5px;background-color:darkgreen"> EBT </button>
+            <button id="disable_P_6" onclick=" endTransactionCash(20,'{{ total }}'); " class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px" > 20 </button>
+            <button id="disable_P_7" onclick=" endTransactionCash(50,'{{ total }}'); " class="btn btn-success" style="width:23%;margin: 2px;height:60px;margin-bottom:5px"> 50 </button>
+            <button id="disable_P_8" onclick=" endTransactionCash('CASH','{{ total }}'); " class="btn btn-success" style="width:23%;margin:2px;height:60px;margin-bottom:5px;background-color:rgb(27, 66, 27)"> CASH </button>
         </div>
         <div class="loginPopup" id='cash_popup'> </div>
         <hr >
         <!-- Quick add items buttonss -->
-        <div class="btn-block"  style="height: 353px;overflow:scroll;text-align:center;padding-top: 7px;">
+        <div class="btn-block" style="height: 353px; overflow: scroll; text-align: center; padding-top: 7px;">
+
+            <!-- Scrollable Rows for Other Products -->
             {% for i in displayed_items %}
-             <!-- only 24 buttons to be added per section  -->
-            {% if i.variable_price %}
-            <button onclick="variableAmount('{{i.barcode}}','{{ i.display_name }}','{{ i.display_info }}')" class="btn btn-primary" style="width:23%;margin:2px;height:60px;margin-bottom:5px;margin-top:5px;background-color:'{{ i.display_color }}'"> {{ i.display_name }} </a>
-            {% else %}
-            <button onclick="return window.open('/cart/add/{{i.barcode}}/1/',target='_self')" class="btn btn-dark" style="width:23%;margin:2px;height:60px;margin-bottom:5px;background-color:'{{ i.display_color }}'" >  {{ i.display_name }} </button>
-            {% endif %}
+                <!-- Only 24 buttons to be added per section -->
+                {% if forloop.counter <= 24 %}
+                    <div class="button-wrapper" style="display: inline-block; position: relative; width: 23%; /* Adjust width as needed */">
+                        {% if i.variable_price %}
+                            <button onclick="variableAmount('{{ i.barcode }}', '{{ i.display_name }}', '{{ i.display_info }}')"
+                                    class="btn btn-primary"
+                                    style="width: 100%; height:60px; margin-bottom:5px; background-color: '{{ i.display_color }}'; white-space: normal; word-wrap: break-word; border: 1px solid '{{ i.display_color }}';">
+                                {{ i.display_name }}  {{ i.product.name }} <!-- Display both display_name and product name -->
+                            </button>
+                        {% else %}
+                            <button onclick="return window.open('/cart/add/{{ i.barcode }}/1/', target='_self')"
+                                    class="btn btn-dark"
+                                    style="width: 100%; height:60px; margin-bottom:5px; background-color: '{{ i.display_color }}'; white-space: normal; word-wrap: break-word;">
+                                {{ i.display_name }}  {{ i.product.name }} <!-- Display both display_name and product name -->
+                            </button>
+                        {% endif %}
+                        <!-- Checkbox positioned at top-right corner of the button wrapper -->
+                        <input type="checkbox" onclick="lockButton('{{ i.barcode }}', this.checked); event.stopPropagation();" 
+                               id="lockButton_{{ i.barcode }}" 
+                               style="position: absolute; top: 3px; right: 3px;" 
+                               value="1"
+                               checked="checked"
+                               data-item-name="{{ i.display_name }}">
+                    </div>
+                {% endif %}
             {% endfor %}
+        
+            <!-- Sticky Top Row for Top Selling Items -->
+                <div class="top-selling-row" style="position: sticky; top: 0; background-color: white; z-index: 0; padding: 5px 0; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); border-bottom: 2px solid #ddd;">
+                    {% for item in top_selling_items %}
+                        {% with item.displayed_items.first as display_item %}
+                            <div class="button-wrapper" style="display: inline-block; position: relative; width: 23%;">
+                                <button onclick="return window.open('/cart/add/{{ item.barcode }}/1/', target='_self')"
+                                        class="btn btn-success"  
+                                        style="width: 100%; height:60px; margin-bottom:5px; background-color: #318CE7; white-space: normal; word-wrap: break-word; border: 1px solid #318CE7;">
+                                    {{ display_item.display_name }}  {{ item.name }}  
+                                </button>
+                                <!-- Checkbox positioned at top-right corner of the button wrapper -->
+                                <input type="checkbox" onclick="lockButton('{{ item.barcode }}', this.checked); event.stopPropagation();" 
+                                       id="lockButton_{{ item.barcode }}" 
+                                       style="position: absolute; top: 3px; right: 3px;" 
+                                       value="0"
+                                       data-item-name="{{ item.name }}">  
+                            </div>
+                        {% endwith %}
+                    {% endfor %}
+                </div>
         </div>
+        
+        
+        
+        
+        
         <hr style="margin-right: 4%;">
     </div>
 </div>
-<div class="row" id="customerform" style="width: 100%; padding-right: 0px; display: none; position: absolute; top: 16%; left: 7.5%; z-index: 9999;">
+
+<!-- Edit Customer Data Form -->
+<div class="row customerform" id="customerform" style="width: 100%; padding-right: 0px; display: none; position: absolute;  z-index: 9999;">
    
     <!-- Single Card that holds both columns -->
     <div class="col-lg-6 mb-2">
@@ -221,200 +317,334 @@ Register | Online Retail POS
         for (var i = 0; i < elements.length; i++){ elements[i].disabled = true; }
     </script>
     {% endif %}
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
-    // This function will trigger when the form is submitted
-    function handleSubmitForm(event) {
-        // Prevent the default form submission
-        event.preventDefault();
-
-        // Get the customer data from the input fields
-        var customer_id = document.getElementById('customer_id').value;
-        var customer_number = document.getElementById('customer_number').value;
-        var customer_name = document.getElementById('customer_name').value;
-
-        // Get the form element
-        var form = event.target;
-
-        // Create hidden input elements to hold the customer data
-        var customer_id_input = document.createElement('input');
-        customer_id_input.type = 'hidden';
-        customer_id_input.name = 'customer_id';
-        customer_id_input.value = customer_id;
-
-        var customer_number_input = document.createElement('input');
-        customer_number_input.type = 'hidden';
-        customer_number_input.name = 'customer_number';
-        customer_number_input.value = customer_number;
-
-        var customer_name_input = document.createElement('input');
-        customer_name_input.type = 'hidden';
-        customer_name_input.name = 'customer_name';
-        customer_name_input.value = customer_name;
-
-        // Append these hidden inputs to the form
-        form.appendChild(customer_id_input);
-        form.appendChild(customer_number_input);
-        form.appendChild(customer_name_input);
-
-        // Now submit the form
-        form.submit();
-    }
-
-    function getCustomers() {
-        // Get the customer number and name from the input fields
-        var customerNumber = document.getElementById("customer_number").value;
-        var customerName = document.getElementById("customer_name").value;
-        if (customerNumber != '' || customerName != ''){
-            // Send AJAX request to the server to search for customers
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", "/search_customer/?customer_number=" + customerNumber + "&customer_name=" + customerName, true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    var data = JSON.parse(xhr.responseText);
-                    var resultsDiv = document.getElementById("customer-results");
-                    
-                    // Clear previous results
-                    resultsDiv.innerHTML = '';
-
-                    // Display new search results
-                    if (data.customers.length > 0) {
-                        data.customers.forEach(function(customer) {
-                            var resultItem = document.createElement("div");
-                            resultItem.className = "result-item";
-                            resultItem.innerHTML = customer.customer_name + " (" + customer.customer_contact + ")";
-                            resultItem.onclick = function() {
-                                populateCustomerData(customer);
-                            };
-                            resultsDiv.appendChild(resultItem);
-                        });
-                    } else {
-                        resultsDiv.innerHTML = "<p>No customers found.</p>";
+        // JavaScript Section
+        
+        function getCustomers() {
+            var customerNumber = document.getElementById("customer_number").value;
+            var customerName = document.getElementById("customer_name").value;
+            
+            if (customerNumber != '' || customerName != '') {
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", "/search_customer/?customer_number=" + customerNumber + "&customer_name=" + customerName, true);
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState == 4 && xhr.status == 200) {
+                        var data = JSON.parse(xhr.responseText);
+                        var resultsDiv = document.getElementById("customer-results");
+                        resultsDiv.innerHTML = ''; // Clear previous results
+        
+                        if (data.customers.length > 0) {
+                            data.customers.forEach(function(customer) {
+                                var resultItem = document.createElement("div");
+                                resultItem.className = "result-item";
+                                resultsDiv.style.display = 'block';
+                                resultItem.innerHTML = customer.customer_name + " (" + customer.customer_contact + ")";
+                                resultItem.onclick = function() {
+                                    populateCustomerData(customer);
+                                    saveCustomerDataToSession();
+                                };
+                                resultsDiv.appendChild(resultItem);
+                            });
+                        } else {
+                            resultsDiv.innerHTML = "<p>No customers found.</p>";
+                            setTimeout(function() {
+                                resultsDiv.style.display = 'none';  // Hides the div
+                            }, 3000);
+                        }
                     }
+                };
+                xhr.send();
+            }
+        }
+        
+        function populateCustomerData(customer) {
+            document.getElementById("customer_number").value = customer.customer_contact;
+            document.getElementById("customer_name").value = customer.customer_name;
+            document.getElementById("customer_id").value = customer.customer_id;
+            document.getElementById("customer_email").value = customer.customer_email;
+            document.getElementById("customer_address").value = customer.customer_address;
+            document.getElementById("customer-results").innerHTML = ''; // Clear results
+        }
+        
+        function saveCustomerDataToSession() {
+            var customer_id = document.getElementById('customer_id').value;
+            var customer_number = document.getElementById('customer_number').value;
+            var customer_name = document.getElementById('customer_name').value;
+            var customer_email = document.getElementById('customer_email').value;
+            var customer_address = document.getElementById('customer_address').value;
+        
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/set_customer_session/?customer_id=" + customer_id + "&customer_number=" + customer_number + "&customer_name=" + customer_name + "&customer_email=" + customer_email + "&customer_address=" + customer_address , true);
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    console.log("Customer session updated successfully!");
+                } else {
+                    console.error("Error updating session");
                 }
             };
             xhr.send();
-        } 
-    }
+        }
+        
+        function resetCustomerData() {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/reset_customer_session/", true);
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    console.log("Customer session data cleared successfully!");
+                    document.getElementById('customer_id').value = '';
+                    document.getElementById('customer_email').value = '';
+                    document.getElementById('customer_address').value = '';
+                    document.getElementById('customer_number').value = '';
+                    document.getElementById('customer_name').value = '';
+                    document.getElementById('customer-results').innerHTML = '';
+                } else {
+                    console.error("Error clearing session data");
+                }
+            };
+            xhr.send();
+        }
+        
+        function validateCustomerNumber() {
+            var customerNumber = document.getElementById('customer_number').value;
+            if (customerNumber === "") {
+                alert("Customer Number is required before proceeding.");
+                return false;
+            }
+            return true;
+        }
+        
+        function EditCustomerForm() {
+            const custform = document.getElementById('customerform');
+            document.getElementById('customerId').value = document.getElementById('customer_id').value;
+            document.getElementById('customerName').value = document.getElementById('customer_name').value;
+            document.getElementById('customerNumber').value = document.getElementById('customer_number').value;
+            document.getElementById('customerEmail').value = document.getElementById('customer_email').value;
+            document.getElementById('customerAddress').value = document.getElementById('customer_address').value;
+        
+            if (custform.style.display == 'none') {
+                custform.style.display = 'block';
+            } else {
+                custform.style.display = 'none';
+            }
+        }
+        
+        function cancelForm() {
+            document.getElementById('customerform').style.display = 'none';
+        }
+        
+        function saveCustomer() {
+            const CUST_ID = document.getElementById('customerId').value;
+            const CUST_NAME = document.getElementById('customerName').value;
+            const CUST_NUMBER = document.getElementById('customerNumber').value;
+            const CUST_EMAIL = document.getElementById('customerEmail').value;
+            const CUST_ADDRESS = document.getElementById('customerAddress').value;
+        
+            const cust_data = {
+                customer_id: CUST_ID,
+                customer_name: CUST_NAME,
+                customer_number: CUST_NUMBER,
+                customer_email: CUST_EMAIL,
+                customer_address: CUST_ADDRESS
+            };
+        
+            const csrfToken = document.cookie.match(/csrftoken=([\w-]+)/)[1];  // Get CSRF token
+        
+            $.ajax({
+                url: "{% url 'save_customer' %}",
+                method: "POST",
+                headers: { "X-CSRFToken": csrfToken },
+                data: cust_data,
+                success: function(response) {
+                    if (response.success) {
+                        alert("Customer saved successfully.");
+                        cancelForm();
+                    } else {
+                        alert("Error saving customer.");
+                    }
+                },
+                error: function() {
+                    alert("Error saving customer.");
+                }
+            });
+        }
+        
+        function removeProductFromCart(barcode) {
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-    // Function to populate fields when a customer is selected from the list
-    function populateCustomerData(customer) {
-        document.getElementById("customer_number").value = customer.customer_contact;
-        document.getElementById("customer_name").value = customer.customer_name;
-        document.getElementById("customer_id").value = customer.customer_id;
-        document.getElementById("customer_email").value = customer.customer_email;
-        document.getElementById("customer_address").value = customer.customer_address;
-        document.getElementById("customer-results").innerHTML = ''; // Clear results
-    }
+            $.ajax({
+                url: `/cart/remove/${barcode}/`,
+                method: "POST",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function (response) {
+                    if (response.success) {
+                        // Remove the item from the cart
+                        $(`#cart-item-${barcode}`).remove();
 
-    function validateCustomerNumber() {
-        var customerNumber = document.getElementById('customer_number').value;
-        if (customerNumber === "") {
-            alert("Customer Number is required before proceeding.");
+                        // Update transaction info dynamically
+                        updateTransactionInfo(response.updatedTotal, response.updatedTaxTotal);
+                    } else {
+                        alert(response.message || "Failed to remove product. Please try again.");
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error("AJAX error:", error);
+                    alert("Error while processing the request. Please try again later.");
+                }
+            });
+        }
+
+        function updateTransactionInfo(updatedTotal, updatedTaxTotal) {
+            // Update the values in the transaction summary
+            $(".text-dark:contains('Sub Total')").html(`<strong>Sub Total : </strong>${(updatedTotal - updatedTaxTotal).toFixed(2)}`);
+            $(".text-dark:contains('Tax Total')").html(`<strong>Tax Total : </strong>${updatedTaxTotal.toFixed(2)}`);
+            $(".h3.mb-0.font-weight-bold.text-gray-800").html(updatedTotal.toFixed(2));
+        }
+
+
+        // Function to fetch product details based on barcode or name
+        function fetchProductDetails() {
+            const barcode = document.getElementById("barcode").value;
+            const productName = document.getElementById("product-name").value;
+
+            if (barcode || productName) {
+                $.ajax({
+                    url: "/get-product-details/",
+                    method: "GET",
+                    data: { barcode: barcode, name: productName },
+                    dataType: "json",
+                    success: function (data) {
+                        if (data.name) {
+                            $("#product-name").val(data.name);
+                        }
+                        if (data.barcode) {
+                            $("#barcode").val(data.barcode);
+                        }
+                        if (data.qty) {
+                            $("#quantity").val(data.qty);
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Error fetching product details:", xhr.responseText);
+                        console.error("Status:", status);
+                        console.error("Error:", error);
+                    }
+
+                });
+            }
+        }
+
+        // Clear input fields and reset transaction amount
+        function clearInputFields() {
+            $("#product-name").val("");
+            $("#barcode").val("");
+            $("#quantity").val("");
+        
+            // Reset transaction amounts to initial state (assuming 0 for reset)
+            $(".text-dark:contains('Sub Total')").html(`<strong>Sub Total : </strong>0.00`);
+            $(".text-dark:contains('Tax Total')").html(`<strong>Tax Total : </strong>0.00`);
+            $(".h3.mb-0.font-weight-bold.text-gray-800").html("0.00");
+        }
+
+        $(document).ready(function () {
+            // Dynamic customer search
+            $("#customer_number, #customer_name").on("input", function () {
+                getCustomers();
+            });
+        
+            // Handle form submission dynamically
+            $("form").on("submit", function (event) {
+                event.preventDefault();
+        
+                const customerData = {
+                    customer_id: $("#customer_id").val(),
+                    customer_number: $("#customer_number").val(),
+                    customer_name: $("#customer_name").val(),
+                };
+        
+                Object.keys(customerData).forEach(function (key) {
+                    const input = $("<input>")
+                        .attr("type", "hidden")
+                        .attr("name", key)
+                        .val(customerData[key]);
+                    $(this).append(input);
+                }.bind(this));
+        
+                this.submit();
+            });
+        
+            // Trigger auto-population when barcode or name fields are updated
+            $("#barcode, #product-name").on("change input", function () {
+                fetchProductDetails();
+            });
+        
+            // Bind clearInputFields function to the cancel button
+            $("#cancel-button").on("click", function () {
+                clearInputFields();
+            });
+        });
+
+        function endTransactionCash(value,total){
+            var total = Number(total)
+            if (value=="Next"){
+                value = Math.ceil(total) }
+            var value = Number(value)
+            if (total<=value){
+                window.open("/endTransaction/cash/"+value+"/", target="_self")
+            }else{
+                // var cash = Number(prompt("Enter Cash Amount...\n\n"))
+                document.getElementById("cash_popup").innerHTML = '<div class="formPopup" id="popupForm" style="display:block"><form action="#" onsubmit="return endForm(this,'+total+')" class="formContainer"> <div class="h3 mb-4 text-gray-800">Please Enter <br>Cash Amount....</div><input class="mb-3" type="text" id="cashAmount" placeholder="Cash Amount..." autocomplete="off" required /><button type="submit" class="btn btn-success btn-lg btn-block">Enter</button><button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button></form></div>'
+                $( "#cashAmount" ).focus();
+            }
+        }
+
+        function endForm(form,total){
+            closeForm()
+            endTransactionCash(form.cashAmount.value,total)
             return false;
         }
-        return true;
-    }
 
-    function EditCustomerForm(){
-        const custform = document.getElementById('customerform')
-
-        document.getElementById('customerId').value  = document.getElementById('customer_id').value ;
-        document.getElementById('customerName').value  = document.getElementById('customer_name').value ; 
-        document.getElementById('customerNumber').value  = document.getElementById('customer_number').value ;
-        document.getElementById('customerEmail').value  = document.getElementById('customer_email').value ;
-        document.getElementById('customerAddress').value  = document.getElementById('customer_address').value ;
-
-        if (custform.style.display == 'none'){
-            custform.style.display = 'block';
-        } else {
-            custform.style.display = 'none';
+        function closeForm(){
+            document.getElementById("popupForm").style.display = "none";
         }
-    }
 
-    function cancelForm() {
-        document.getElementById('customerform').style.display = 'none';
-    }
-
-    function saveCustomer() {
-        const CUST_ID = document.getElementById('customerId').value;
-        const CUST_NAME = document.getElementById('customerName').value;
-        const CUST_NUMBER = document.getElementById('customerNumber').value;
-        const CUST_EMAIL = document.getElementById('customerEmail').value;
-        const CUST_ADDRESS = document.getElementById('customerAddress').value;
-
-        const data = {
-            customer_id: CUST_ID,
-            customer_name: CUST_NAME,
-            customer_number: CUST_NUMBER,
-            customer_email: CUST_EMAIL,
-            customer_address: CUST_ADDRESS
-        };
-
-        const csrfToken = document.cookie.match(/csrftoken=([\w-]+)/)[1];  // Get CSRF token
-
-        $.ajax({
-            url: '/save_customer/',  
-            type: 'POST',  
-            data: JSON.stringify(data),  
-            contentType: 'application/json',  
-            headers: {
-                'X-CSRFToken': csrfToken  // Use the CSRF token directly
-            },
-            success: function(response) {
-                if (response.success) {
-                    alert('Customer saved or updated successfully!');
-
-                    // Clear the input fields after successful save
-                    document.getElementById('customerName').value = '';
-                    document.getElementById('customerNumber').value = '';
-                    document.getElementById('customerEmail').value = '';
-                    document.getElementById('customerAddress').value = '';
-                } else {
-                    alert('An error occurred while saving the customer: ' + response.error);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error:', error);
-                alert('An error occurred while saving the customer.');
-            }
-        });
-    }
-
-
-    function endTransactionCash(value,total){
-        var total = Number(total)
-        if (value=="Next"){
-            value = Math.ceil(total) }
-        var value = Number(value)
-        if (total<=value){
-            window.open("/endTransaction/cash/"+value+"/", target="_self")
-        }else{
-            // var cash = Number(prompt("Enter Cash Amount...\n\n"))
-            document.getElementById("cash_popup").innerHTML = '<div class="formPopup" id="popupForm" style="display:block"><form action="#" onsubmit="return endForm(this,'+total+')" class="formContainer"> <div class="h3 mb-4 text-gray-800">Please Enter <br>Cash Amount....</div><input class="mb-3" type="text" id="cashAmount" placeholder="Cash Amount..." autocomplete="off" required /><button type="submit" class="btn btn-success btn-lg btn-block">Enter</button><button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button></form></div>'
+        function variableAmount(barcode,name,info){
+            document.getElementById("cash_popup").innerHTML = '<div class="formPopup" id="popupForm" style="display:block"><form action="#" onsubmit="return amountProductFunc(this);" class="formContainer"><label id="department_value" class="h5 text-primary">'+barcode+'</label><hr><div class="h5 text-success mb-3">'+name+'</div><div class="h6 mb-1 text-gray-800" style="text-align:left">Please Enter Amount...</div><input class="mb-3" type="text" id="cashAmount" placeholder="Variable Amount..." autocomplete="off" required /><button type="submit" class="btn btn-success btn-lg btn-block">Enter</button><button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button><div style="text-align:left"><br>'+info+'</div></form></div>'
             $( "#cashAmount" ).focus();
         }
-    }
-    function endForm(form,total){
-        closeForm()
-        endTransactionCash(form.cashAmount.value,total)
-        return false;
-    }
-    function closeForm(){
-        document.getElementById("popupForm").style.display = "none";
-    }
-    
-    function variableAmount(barcode,name,info){
-        document.getElementById("cash_popup").innerHTML = '<div class="formPopup" id="popupForm" style="display:block"><form action="#" onsubmit="return amountProductFunc(this);" class="formContainer"><label id="department_value" class="h5 text-primary">'+barcode+'</label><hr><div class="h5 text-success mb-3">'+name+'</div><div class="h6 mb-1 text-gray-800" style="text-align:left">Please Enter Amount...</div><input class="mb-3" type="text" id="cashAmount" placeholder="Variable Amount..." autocomplete="off" required /><button type="submit" class="btn btn-success btn-lg btn-block">Enter</button><button type="button" class="btn btn-danger btn-lg btn-block" onclick="closeForm()">Close</button><div style="text-align:left"><br>'+info+'</div></form></div>'
-        $( "#cashAmount" ).focus();
-    }
-    function amountProductFunc(form){
-        closeForm()
-        department = form.firstElementChild.innerHTML
-        amount = Number(form.cashAmount.value)
-        if (amount){
-            window.open("/register/"+department+"/"+amount+"/",target="_self")
+
+        function lockButton(barcode, checked) {
+            // Get the name of the item (assuming the item name is in a data attribute)
+            const itemName = document.getElementById('lockButton_' + barcode).dataset.itemName;  // Assuming the item name is stored in a data attribute
+
+            const url = checked ? '/api/add_displayed_item/' : '/api/remove_displayed_item/';
+            const csrf_token = document.querySelector('[name=csrfmiddlewaretoken]').value;  // Get CSRF token
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf_token  // Include CSRF token in the headers for security
+                },
+                body: JSON.stringify({
+                    'barcode': barcode,  // Send barcode of the item being locked/unlocked
+                    'display_name': itemName  // Send the name of the item
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Handle response or error here if needed
+                console.log(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
         }
-        return false
-    }
+
+
+
 </script>
+
 {% endblock %}

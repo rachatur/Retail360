@@ -5,12 +5,12 @@ from django.contrib.auth.models import User
 from datetime import datetime, timedelta
 from django.db.models import F
 from inventory.models import product, PERCENTAGE_VALIDATOR
+# from django_tenants.models import TenantModel
+
 import pytz
 timezone = pytz.timezone("US/Eastern")
 
-
-# Create your models here.transaction_dt
-  
+# class Customer(TenantModel):
 class Customer(models.Model):
     customer_id             = models.AutoField(primary_key=True, unique=True)
     customer_name           = models.CharField(max_length=250, null=True, blank=True)
@@ -19,21 +19,22 @@ class Customer(models.Model):
     customer_password       = models.CharField(max_length=250, null=True, blank=True)
     customer_address        = models.CharField(max_length=500, null=True, blank=True)
     customer_payment_method = models.CharField(max_length=100, null=True, blank=True)
-    created_by              = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True,related_name='created_customers')
+    created_by              = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,related_name='created_customers')
 
     def __str__(self):
         return self.customer_name
     
+# class transaction(TenantModel):
 class transaction(models.Model):
     date_time       = models.DateTimeField(auto_now_add=True)
     transaction_dt  = models.DateTimeField(editable=False, null=False, blank=False,)
     user            = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.RESTRICT, null=False, blank=False,editable=False,)
     customer        = models.ForeignKey(Customer, on_delete=models.RESTRICT, null=True, blank=True,editable=False,)
     transaction_id  = models.CharField(unique=True, max_length=50, editable=False,null=False)
-    total_sale      = models.DecimalField(max_digits=7,decimal_places=2,null=False,editable=False)
-    sub_total       = models.DecimalField(max_digits=7,decimal_places=2,null=False,editable=False)
-    tax_total       = models.DecimalField(max_digits=7,decimal_places=2,null=True,editable=False)
-    deposit_total   = models.DecimalField(max_digits=7,decimal_places=2,null=True,editable=False)
+    total_sale      = models.DecimalField(max_digits=20,decimal_places=2,null=False,editable=False)
+    sub_total       = models.DecimalField(max_digits=20,decimal_places=2,null=False,editable=False)
+    tax_total       = models.DecimalField(max_digits=20,decimal_places=2,null=True,editable=False)
+    deposit_total   = models.DecimalField(max_digits=20,decimal_places=2,null=True,editable=False)
     payment_type    = models.CharField(choices=[('CASH','CASH'),('DEBIT/CREDIT','DEBIT/CREDIT'),('EBT','EBT')],max_length=32, null=False,editable=False)
     receipt         = models.TextField(blank=False,null=False,editable=False)
     products        = models.TextField(blank=False,null=False,editable=False)
@@ -58,6 +59,7 @@ class transaction(models.Model):
         verbose_name_plural = "Transactions"
 
 
+# class productTransaction(TenantModel):
 class productTransaction(models.Model):
     transaction             = models.ForeignKey("transaction", on_delete=models.RESTRICT, null=False, blank=False,editable=False,)
     customer                = models.ForeignKey(Customer, on_delete=models.RESTRICT, null=True, blank=True,editable=False,)
@@ -66,15 +68,15 @@ class productTransaction(models.Model):
     barcode                 = models.CharField(max_length=32, editable=False, blank = False, null=False)
     name                    = models.CharField(max_length=125, editable=False, blank = False, null = False)
     department              = models.CharField(max_length=125, editable=False,blank = False, null = True)
-    sales_price             = models.DecimalField(max_digits=7, editable=False,decimal_places=2,null=False,blank = False)
+    sales_price             = models.DecimalField(max_digits=20, editable=False,decimal_places=2,null=False,blank = False)
     qty                     = models.IntegerField(default=0, editable=False, null=True)
-    cost_price              = models.DecimalField(max_digits=7,decimal_places=2,editable=False, default=0,null=True)
+    cost_price              = models.DecimalField(max_digits=20,decimal_places=2,editable=False, default=0,null=True)
     tax_category            = models.CharField(max_length=125, editable=False,blank = False, null = False)
-    tax_percentage          = models.DecimalField(max_digits=6, decimal_places=3, validators=PERCENTAGE_VALIDATOR,null=False,blank=False)
-    tax_amount              = models.DecimalField(max_digits=7,decimal_places=2,editable=False, default=0,null=True)
+    tax_percentage          = models.DecimalField(max_digits=20, decimal_places=3, validators=PERCENTAGE_VALIDATOR,null=False,blank=False)
+    tax_amount              = models.DecimalField(max_digits=20,decimal_places=2,editable=False, default=0,null=True)
     deposit_category        = models.CharField(max_length=125, editable=False, blank = False, null = False)
-    deposit                 = models.DecimalField(max_digits=7,decimal_places=2,null=False,blank=False)
-    deposit_amount          = models.DecimalField(max_digits=7,decimal_places=2,editable=False, default=0,null=True)
+    deposit                 = models.DecimalField(max_digits=20,decimal_places=2,null=False,blank=False)
+    deposit_amount          = models.DecimalField(max_digits=20,decimal_places=2,editable=False, default=0,null=True)
     payment_type            = models.CharField(max_length=32, null=False,editable=False)
 
     def save(self,*args,**kwargs):
@@ -88,18 +90,3 @@ class productTransaction(models.Model):
     class Meta:
         verbose_name_plural = "Product Transactions"
 
-class Profile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    otp = models.CharField(max_length=6)
-    otp_timestamp = models.DateTimeField(auto_now_add=True)
-
-    def is_otp_expired(self):
-        # Convert otp_timestamp to aware datetime if it's naive
-        # if timezone.is_naive(self.otp_timestamp):  # Check if it's naive
-        #     self.otp_timestamp = timezone.make_aware(self.otp_timestamp, timezone)  # Make it aware
-
-        # Get current time in the specified timezone (aware datetime)
-        now = timezone.localize(datetime.now())  # Convert current time to aware datetime
-
-        return self.otp_timestamp < now - timedelta(minutes=10)
-  

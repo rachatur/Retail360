@@ -6,9 +6,11 @@ from django.conf import settings
 from django.shortcuts import redirect
 import pandas as pd
 from inventory.models import product as Product
+# from django_tenants.models import TenantModel
 
 
-class Cart(object):
+# class Cart(TenantModel):
+class Cart(models.Model):
     def __init__(self, request):
         self.request            = request
         self.session            = request.session
@@ -88,6 +90,7 @@ class Cart(object):
 
 
 # Create your models here.transaction_dt
+# class displayed_items(TenantModel):
 class displayed_items(models.Model):
     barcode          = models.CharField(unique=True,max_length=16,blank = False,null=False)
     display_name     = models.CharField(max_length=125, blank = False, null = False)

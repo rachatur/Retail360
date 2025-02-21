@@ -1,5 +1,6 @@
 from django.shortcuts import redirect, render
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from .models import product as Product
 from .models import product
 from django import forms
@@ -14,8 +15,12 @@ class ProductLookup(forms.Form):
 class AddProduct(forms.Form):
     qty = forms.IntegerField(label="Quantity To Be Added",widget=TextInput(attrs={'style':"width:100%"}))
     barcode = forms.CharField(label="Product Barcode", widget=TextInput(attrs={'autofocus':"autofocus",' autocomplete':"off",'style':"width:100%"}),max_length = 32)
-
-
+    def clean_qty(self):
+        qty = self.cleaned_data.get('qty')
+        if qty < 0:
+            raise ValidationError("Quantity cannot be negative.")
+        return qty
+    
 # Create your views here.
 @login_required(login_url="/user/login")
 def product_lookup(request):

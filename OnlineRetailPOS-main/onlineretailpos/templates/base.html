@@ -25,12 +25,19 @@
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs4/dt-1.12.1/datatables.min.css"/>
- 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <script type="text/javascript" src="https://cdn.datatables.net/v/bs4/dt-1.12.1/datatables.min.js"></script>
     
     <style>
-        * {
+       * {
           box-sizing: border-box;
+        }
+        .logo{
+            height: 40px;
+            width: 100px;
+            margin-left: 2px;
+            margin-right: 2px;
+            padding: 4px;
         }
         .openBtn {
           display: flex;
@@ -81,6 +88,43 @@
           background-color: #ddd;
           outline: none;
         }
+
+        .formContainer input[type=text]:focus,
+        .formContainer input[type=password]:focus {
+          background-color: #ddd;
+          outline: none;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+        }
+
+        input[type="number"] {
+    -webkit-appearance: textfield;  /* Chrome, Safari, and newer versions of Edge */
+    -moz-appearance: textfield;     /* Firefox (Gecko) */
+    appearance: textfield;          /* Standard syntax (might not be fully supported in all browsers) */
+}
+
+        /* Footer Styles */
+        .footer {
+            width: 100%;
+            position:absolute;
+            bottom: 0;
+            right: 0;
+            color: black;
+            padding: 5px;
+            font-size: 10px;
+            /* text-align: center; */
+            text-align: right;
+            padding-right: 20px;
+        }
+
+        .footer a {
+            color: #000;
+            text-decoration: none;
+        }
     </style>
 
 </head>
@@ -90,13 +134,6 @@
     <audio id="notification-audio" preload="auto" autoplay>
         <source src="{% static 'note.mp3' %}" type="audio/mpeg">
     </audio>
-    <!-- <script>
-        // Check if the page is being reloaded
-        if (performance.navigation.type === 1) {
-            var audio = document.getElementById('notification-audio');
-            audio.play();
-        }
-    </script> -->
     
     <!-- Page Wrapper -->
     <div id="wrapper" >
@@ -106,48 +143,66 @@
             <!-- Sidebar - Brand -->
             <a class="sidebar-brand d-flex align-items-center justify-content-center" href="{% url 'home' %}" >
                 <div class="sidebar-brand-icon">
-                    <i class="fas fa-store"></i>
+                    <!-- <i class="fas fa-store"></i> -->
+                    <!-- <img src="{{ request.session.logo }}" alt="Logo"> -->
+                    {% if request.session.logo != 'None' %}
+                        <img id="logo_img" class="logo" src="" alt="Logo">
+                    {% else %}
+                        <i class="fas fa-store"></i>
+                    {% endif %}
+                    <!-- <p> {{ request.session.logo }}</p>  -->
+
                 </div>
-                <div class="sidebar-brand-text">Online Retail POS System</div>
+                <!-- <div class="sidebar-brand-text">{{ request.session.current_client }}</div> -->
             </a>
             <hr class="sidebar-divider my-0">
             <!-- Divider -->
-            <li class="nav-item active" style="padding-top:20px;padding-bottom:20px">
-                <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="true" aria-controls="collapseTwo">
-                        <i class="fas fa-fw fa-desktop"></i>
-                        <span>Dashboards</span>
-                </a>
-                <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionSidebar">
-                    <div class="bg-white py-2 collapse-inner rounded">
-                        <!-- <h6 class="collapse-header">Dashboards</h6> -->
-                        <a class="collapse-item" href="{% url 'dashboard_sales' %}"><i class="fas fa-fw fa-chart-line"></i> Sales Dashboard</a>
-                        <a class="collapse-item" href="{% url 'dashboard_department' %}"><i class="fas fa-fw fa-chart-bar"></i> Department Dashboard</a>
-                        <a class="collapse-item" href="{% url 'dashboard_products' %}"><i class="fas fa-fw fa-table"></i> Products Dashboard</a>
+            {% if request.user.roles != 'posuser' and request.user.roles != 'inventoryuser' %}
+                <li class="nav-item active" style="padding-top:20px;padding-bottom:20px">
+                    <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="true" aria-controls="collapseTwo">
+                            <i class="fas fa-fw fa-desktop"></i>
+                            <span>Dashboards</span>
+                    </a>
+                    <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionSidebar">
+                        <div class="bg-white py-2 collapse-inner rounded">
+                            {% if request.user.roles == 'admin' or  request.user.roles == 'superuser' %}
+                            <a class="collapse-item" href="{% url 'dashboard_sales' %}"><i class="fas fa-fw fa-chart-line"></i> Sales Dashboard</a>
+                                {% if request.session.selected_client != 'public' %}
+                                    <a class="collapse-item" href="{% url 'dashboard_department' %}"><i class="fas fa-fw fa-chart-bar"></i> Department Dashboard</a>
+                                    <a class="collapse-item" href="{% url 'dashboard_products' %}"><i class="fas fa-fw fa-table"></i> Products Dashboard</a>
+                                {% endif %}
+                            <a class="collapse-item" href="{% url 'profit_loss_dashboard' %}"><i class="fa fa-{{request.session.currency}}" aria-hidden="true"></i> P&L Dashboard</a>
+                            {% endif %}
+                            {% if request.user.roles == 'superuser' %}
+                            <a class="collapse-item" href="{% url 'dashboard' %}"><i class="fas fa-fw fa-user" aria-hidden="true"></i> Users Dashboard</a>
+                            {% endif %}
+                        </div>
                     </div>
-                </div>
-            </li>
-            <!-- Nav Item - Dashboard -->
-            <hr class="sidebar-divider">
+                </li>
+                <hr class="sidebar-divider">
+            {% endif %}
+            {% if request.user.roles != 'inventoryuser' %}
             <div class="sidebar-heading">
                 Register 
             </div>
             <li class="nav-item active">
-                <a class="nav-link" href="{% url 'register' %}" >
-                    <i class="fas fa-cash-register"></i>
-                    <span>Register</span>
-                </a>
-                <a class="nav-link" href="{% url 'transactionView' %}" >
-                    <i class="fas fa-list-alt"></i>
-                    <span>Transactions</span>
-                </a>
+                {% if request.session.selected_client != 'public' %}
+                    <a class="nav-link" href="{% url 'register' %}" >
+                        <i class="fas fa-cash-register"></i>
+                        <span>Register</span>
+                    </a>
+                    <a class="nav-link" href="{% url 'transactionView' %}" >
+                        <i class="fas fa-list-alt"></i>
+                        <span>Transactions</span>
+                    </a>
+                {% endif %}
                 <a class="nav-link" href="{% url 'retail_display' %}" target="_blank" >
                     <i class="far fa-window-maximize"></i>
                     <span>Customer Screen</span>
                 </a>
-                
             </li>
-            
             <hr class="sidebar-divider">
+            {% endif %}
             <div class="sidebar-heading">
                 Other
             </div>
@@ -156,10 +211,12 @@
                     <i class="fas fa-search"></i>
                     <span>Price Lookup</span>
                 </a>
+                {%if request.user.roles != 'posuser' %}
                 <a class="nav-link" href="{% url 'inventory_add' %}" >
                     <i class="fas fa-dolly"></i>
                     <span>Add Inventory</span>
                 </a>
+                {% endif %}
             </li>
             <hr class="sidebar-divider">
             {% if user.is_staff %}
@@ -175,9 +232,10 @@
             <hr class="sidebar-divider">
             {% endif %}
             <!-- Sidebar Toggler (Sidebar) -->
-            <!-- <div class="text-center d-none d-md-inline">
+            <div class="text-center d-none d-md-inline">
                 <button class="rounded-circle border-0" id="sidebarToggle"></button>
-            </div> -->
+            </div>
+            
         </ul>
         {% endblock %}
         <div id="content-wrapper" class="d-flex flex-column">
@@ -193,23 +251,29 @@
                         {% endblock %}
                         
                         <ul class="navbar-nav ml-auto">
+                            
                             {% if user.is_authenticated %}
+                                {% if request.session.clients|length > 1 %}
+                                    <li class="nav-item dropdown no-arrow d-flex align-items-center justify-content-center">
+                                        <select name="client" id="client" onchange="setClient()" class="form-control d-flex align-items-center justify-content-center" style="height: 35px; width: auto;">
+                                            {% for client in request.session.clients %}
+                                            <option value="{{ client.0 }}" {% if client.0 == request.session.selected_client %}selected{% endif %}>{{ client.1 }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </li>
+                                {% endif %}
+                            
                             <li class="nav-item dropdown no-arrow">
                                 <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
                                     data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                     <div class="d-flex align-items-center">
-                                        <!-- User Icon -->
-                                        
                                         <div>
-                                            <!-- User Name -->
                                             <span class="mr-2 d-none d-lg-inline text-gray-800 md-primary">Hello, {{ user.first_name }} {{ user.last_name }}</span>
                                             <i class="fas fa-user-alt" style="color:rgb(92, 92, 244);padding-right:5px"></i>
-                                            <!-- Current Date and Time -->
                                             <div id="current-time" class="text-center" style="font-size: 12px; color: #555;"></div>
                                         </div>
                                     </div>
                                 </a>
-                                <!-- Dropdown - User Information -->
                                 <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in p-1"
                                     aria-labelledby="userDropdown" style="background:#e0e0e0">
                                     <hr class="m-1">
@@ -234,13 +298,19 @@
                     {% block content %}
                     {% endblock %}
                 </div>
+                
             </div>
+            <br>
+            <br>
         </div>
+        
     </div>
+    
 
-    <a class="scroll-to-top rounded" href="#page-top">
+    <a class="scroll-to-top rounded mb-3" style="z-index: 999;" href="#page-top">
         <i class="fas fa-angle-up"></i>
     </a>
+    
 
     <!-- Bootstrap core JavaScript-->
     <script src="{% static 'vendor/jquery/jquery.min.js' %}"></script>
@@ -249,11 +319,14 @@
     <script src="{% static 'vendor/jquery-easing/jquery.easing.min.js' %}"></script>
     <!-- Custom scripts for all pages-->
     <script src="{% static 'js/sb-admin-2.min.js' %}"></script>
-    <!-- Data Table  plugins -->
+    <!-- Data Table plugins -->
     <script src="{% static 'vendor/datatables/jquery.dataTables.min.js' %}"></script>
     <script src="{% static 'vendor/datatables/dataTables.bootstrap4.min.js' %}"></script>
     <!-- Page level custom scripts -->
     <script src="{% static 'js/demo/datatables-demo.js' %}"></script>
+    <!-- <script src='https://kit.fontawesome.com/a076d05399.js' crossorigin='anonymous'></script> -->
+    <script src="https://kit.fontawesome.com/a076d05399.js"></script>
+
     <!-- Add JavaScript to display the current date and time -->
     <script>
         function updateDateTime() {
@@ -261,21 +334,88 @@
             const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
             const dateTimeString = currentDate.toLocaleString('en-US', options); // Adjust locale if necessary
         
-            // Update the content of the current-time div
             document.getElementById('current-time').textContent = dateTimeString;
         }
     
-        // Call the function once to display the date and time immediately
         updateDateTime();
-    
-        // Optionally, update the time every second
         setInterval(updateDateTime, 1000);
+        
+    </script>
+
+    <script type="text/javascript">
+        // Pass the logo URL from Django session to JavaScript
+        // var logoUrl = "{% if request.session.logo %} {% static request.session.logo %}{% else %}''{% endif %}";
+        var logoUrl = "{% if request.session.logo %} {{ request.session.logo }}{% else %}''{% endif %}";
+    
+        window.onload = function() {
+            // Check if the logo URL is set in session
+            if (logoUrl) {
+                var logoImg = document.getElementById('logo_img');
+                if (logoImg) {
+                    logoImg.src = logoUrl;  // Update the logo src dynamically
+                }
+                // console.log(logoUrl)
+                // console.log(logoImg)
+            }
+        }
     </script>
     
     {% block script %}
 
     {% endblock %}
 
+    <!-- Footer -->
+    <div class="footer">
+        <a href="https://ethxsoftcon.com/" target="_blank" style="color: black; text-decoration: none;" title="Powered by ETHX">
+            <img src="{% static 'img/ETHX_Logo.jpg' %}" alt="Powered by ETHX" style="height: 12px; width: 50px; ">
+        </a>
+    </div>
+    
+    <script>
+function setClient() {
+    const clientDropdown = document.getElementById('client');
+    const selectedClientId = clientDropdown.value;
+    
+    if (selectedClientId) {
+        // Send selected client ID to the server
+        fetch("{% url 'set_client' %}", {  // URL for setting the client in the session
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'  // Include CSRF token for security
+            },
+            body: JSON.stringify({ client_id: selectedClientId })  // Send client ID in request body
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();  // Only process if the response is OK (status 200)
+            } else {
+                throw new Error('Failed to set client');
+            }
+        })
+        .then(data => {
+            if (data.success) {
+                console.log('Client set successfully!');
+                
+                // Store a flag in localStorage to indicate that the page is reloading
+                localStorage.setItem('clientSet', 'true');
+                
+                // location.reload();  // Reload the page after client is set
+                window.location.href = "/dashboard_sales/";
+            } else {
+                console.error('Failed to set client');
+            }
+        })
+        .catch(error => {
+            console.error('Error setting client:', error);
+        });
+    }
+}
 
+// Add event listener to dropdown change
+document.getElementById('client').addEventListener('change', setClient);
+    </script>
+    
+    
 </body>
 </html>
