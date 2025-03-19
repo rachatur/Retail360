@@ -71,7 +71,7 @@ class ClientAdmin(ImportExportModelAdmin):
         schema_name = generate_valid_schema_name(raw_schema_name)
 
         # Generate a domain name
-        domain_name = f"{client.client_name.lower()}.103.86.176.184".replace(" ", "-")
+        domain_name = f"{client.client_name.lower()}.posretail360.com".replace(" ", "-")
 
         # Start a transaction block to ensure atomicity
         with transaction.atomic():
@@ -153,7 +153,7 @@ class ClientAdmin(ImportExportModelAdmin):
             tenant.save()
 
             # Update the domain name if necessary
-            domain_name = f"{client.client_name.lower()}.103.86.176.184".replace(" ", "-")
+            domain_name = f"{client.client_name.lower()}.posretail360.com".replace(" ", "-")
 
             domain = Domain.objects.filter(tenant=tenant).first()
             if domain:

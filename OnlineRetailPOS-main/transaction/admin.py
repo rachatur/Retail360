@@ -97,10 +97,10 @@ class ProductTransactionAdmin(ImportExportModelAdmin):
 
 @admin.register(Customer)
 class CustomerAdmin(ImportExportModelAdmin):
-    list_display = ("customer_id", "customer_name", "customer_contact", "customer_email", "customer_payment_method", "created_by_link")
-    fields = ["customer_name", "customer_contact", "customer_email", "customer_address", "customer_payment_method", "created_by"]
+    list_display = ("customer_id", "customer_name", "customer_contact", "customer_email", "created_by_link")
+    fields = ["customer_name", "customer_contact", "customer_email", "customer_address", "customer_payment_method"]
     search_fields = ["customer_name", "customer_contact", "customer_email"]
-    list_filter = ("created_by", "customer_payment_method")
+    list_filter = ("created_by",)
 
     def created_by_link(self, obj=None):
         if obj.created_by is not None:
@@ -118,7 +118,7 @@ class CustomerAdmin(ImportExportModelAdmin):
         return False  # You can enable or disable the "Delete" permission
 
     def has_import_permission(self, request, *args):
-        return True  # You can enable or disable the "Import" permission
+        return False  # You can enable or disable the "Import" permission
 
     class Media:
         js = ["js/jquery.js", "js/list_filter_collapse.js"]  # You can add custom JavaScript here for UI enhancements

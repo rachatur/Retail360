@@ -10,32 +10,68 @@ Profit and Loss Dashboard | Online Retail POS
 
 {% block content %}
 <div class="row col-lg-12">
-    <div class="col-lg-5" style="width:100%;">
-        <div class="card border-left-warning shadow-sm mb-3">
-            <div class="card-header">
-                <div class="text-md font-weight-bold text-warning text-uppercase mb-1"> Profit/Loss Summary </div>
-            </div>
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-md font-weight-bold text-gray-800">Today's Profit/Loss</div>
-                        <div class="h4 font-weight-bold text-gray-800">
-                            <i class="fa fa-{{request.session.currency}}"></i>{{ profit_today|floatformat:2 }}
-                        </div>
-                    </div>
-                    <div class="col mr-2">
-                        <div class="text-md font-weight-bold text-gray-800">Last 30 Days Profit/Loss</div>
-                        <div class="h4 font-weight-bold text-gray-800">
-                            <i class="fa fa-{{request.session.currency}}"></i>{{ profit_last_30_days|floatformat:2 }}
-                        </div>
-                    </div>
+        <div class="col-lg-5" style="width:100%;">
+            <div class="card border-left-warning shadow-sm mb-3">
+                <div class="card-header">
+                    <div class="text-md font-weight-bold text-warning text-uppercase mb-1"> Profit & Loss Overview </div>
                 </div>
-                <div class="text-center mt-3">
-                    <div class="font-weight-bold h5">Total Profit/Loss: <i class="fa fa-{{request.session.currency}}"></i>{{ profit_or_loss|floatformat:2 }}</div>
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Today's Profit/Loss</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_today|floatformat:2 }}
+                            </div>
+                        </div>
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Yesterday's Profit/Loss</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_yesterday|floatformat:2 }}
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div class="row no-gutters align-items-center mt-3">
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Profit/Loss (Last 30 Days)</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_last_30_days|floatformat:2 }}
+                            </div>
+                        </div>
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Profit/Loss This Week (WTD)</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_this_week|floatformat:2 }}
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div class="row no-gutters align-items-center mt-3">
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Profit/Loss This Month (MTD)</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_this_month|floatformat:2 }}
+                            </div>
+                        </div>
+                        <div class="col mr-2">
+                            <div class="text-md font-weight-bold text-gray-800">Profit/Loss This Year (YTD)</div>
+                            <div class="h4 font-weight-bold text-gray-800">
+                                <i class="fa fa-{{request.session.currency}}"></i>{{ profit_this_year|floatformat:2 }}
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div class="text-center mt-3">
+                        <div class="font-weight-bold h5">
+                            Total Profit/Loss: 
+                            <i class="fa fa-{{request.session.currency}}"></i>{{ profit_or_loss|floatformat:2 }}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+
+    
 
     <!-- Profit/Loss Graph -->
     <div class="col-lg-7">

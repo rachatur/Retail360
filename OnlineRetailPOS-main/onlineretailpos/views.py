@@ -111,9 +111,11 @@ def get_product_details(request):
     product_query = product.objects.filter(qty__gt=1)
 
     # Filter by name or barcode if provided
-    if name:
+    if name and not barcode:
         product_query = product_query.filter(name__iexact=name)
-    elif barcode:
+    elif barcode and not name:
+        product_query = product_query.filter(barcode=barcode)
+    elif name and barcode:
         product_query = product_query.filter(barcode=barcode)
     else:
         return JsonResponse({'error': 'Invalid request'}, status=400)
@@ -193,9 +195,10 @@ def register(request):
         Tax_Total = 0
     
     # Fetch top-selling products based on productTransaction
-    top_selling_items = productTransaction.objects.annotate(
-        total_qty_sold= Sum('qty')
-    ).order_by('-total_qty_sold')[:24]  # Get top 5 selling products
+    top_selling_items = productTransaction.objects.values('name','barcode').annotate(
+        total_qty_sold=Sum('qty')
+    ).order_by('-total_qty_sold')[:24] # Get top 5 selling products
+
 
     context = {
         'form': form,
@@ -367,7 +370,6 @@ def save_customer(request):
 def retail_display(request,values=None):
     if values:
         try:
-            # response = f"""<div class="h5 text-dark" style="text-align:left;white-space:pre-wrap;padding-right:50px;"><div class="p-2">{'SUB-TOTAL':<15}:     {round(request.session["Total"]-request.session["Tax_Total"],2)}</div><div class="p-2">{'TAX-TOTAL':<16}:     {request.session["Tax_Total"]}</div></div><hr><div class="h1 text-gray-900 pl-5">TOTAL : <span style="padding-left:80px;">{request.session["Total"]}</span></div>"""
             cart = request.session[settings.CART_SESSION_ID]
             currency = request.session.get('curency_symbol')
             
@@ -412,11 +414,6 @@ def retail_display(request,values=None):
             # print(e)
             return HttpResponse("")
     
-    # path= request.session.get('logo')  # insert the path to your directory   
-    # if os.path.exists(f"{path}"):
-    #     print(f"{settings.STATIC_ROOT}/{path}")
-    #     shutil.copytree(f"./{path}", f"{settings.STATIC_ROOT}/{path}", dirs_exist_ok=True)
-    # img_list = [ path+i for i in  os.listdir(path) if not i.endswith('.md')]
     store_name = request.session.get('STORE_NAME')
     
     return render(request,'retailDisplay.html',context={"store_name":store_name})
@@ -463,54 +460,161 @@ def report_regular(request,start_date,end_date):
             })
 
 @login_required(login_url="/user/login/")
-def dashboard(request):
-    # Filter active users     
-    active_users = User.objects.filter(is_active=True)
- 
-    # Filter inactive users
-    inactive_users = User.objects.filter(is_active=False)
- 
-    # Get all clients with their associated user count and active user count
-    clients = Client.objects.annotate(user_count=Count('users')).order_by('client_name')
-    # Get clients with only active users
- 
-    # Prepare data for the bar graph
-    client_names = [client.client_name for client in clients]
-    total_users = [client.user_count for client in clients]
- 
-    context = {
-        'active_users': active_users,
-        'inactive_users': inactive_users,
-        'clients': clients,  # All clients with the total user count
-        'client_names': client_names,
-        'total_users': total_users,
-    }
- 
-    return render(request, "dashboard.html", context)
-
-
-@login_required(login_url="/user/login/")
-def dashboard_products(request):
-    try:
-        number = 10
-        context = {}
-        today_date=datetime.now().date()
-        last_30_date = datetime.now().date() - timedelta(30)
-        df = pd.DataFrame(productTransaction.objects.filter(transaction_date_time__date__range = (last_30_date,today_date)).order_by('-transaction_date_time').values())
-        context['products_group'] = {}
-        for i, df in df.groupby('department'):
-            context['products_group'][i] = df.groupby(["barcode","name"])[["qty"]].sum().reset_index().sort_values(by=["qty"],ascending=False).iloc[:number].to_dict('records')
-
-        # Fetching least 50 products (50 Products with lowest quantity) 
-        # context['low_inventory_products'] = product.objects.all().order_by('qty').values('barcode','name','qty')[:50]
-
-        # Fetching low inventory products (less than 100 qty)
-        context['low_inventory_products'] = product.objects.filter(qty__lt=100).order_by('qty').values('barcode', 'name', 'qty')[:50]
-        context['number'] = number
-    except:
+def dashboard_sales(request):
+    if request.user.roles == 'posuser':
         return redirect("/register/")
-    return render(request,"productsDashboard.html",context=context)
+    if request.user.roles == 'inventoryuser':
+        return redirect("/inventory/")
+    if request.user.is_superuser == True and request.session.get('selected_client') == 'public':
+        return redirect("/dashboard/")
 
+    context = {}
+    tz = pytz.timezone('US/Eastern')  # Adjust timezone as per your location
+    end_date=datetime.now().date()
+    start_date = (datetime.now() - timedelta(days=7)).date() #Push the change to Prod
+    form = DateSelector(initial = {'end_date':end_date, 'start_date':start_date})
+
+    if request.method == "POST":
+        form = DateSelector(request.POST)
+        if form.is_valid():
+            end_date= form.cleaned_data['end_date']
+            start_date= form.cleaned_data['start_date']
+    
+    start_datetime = tz.localize(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = tz.localize(datetime.combine(end_date, datetime.max.time()))
+    # Ensure 'today_date' is timezone-aware and combine with time (00:00:00)
+    today_date = datetime.combine(datetime.now().date(), datetime.min.time())
+    today_date = tz.localize(today_date)  # Make it timezone-aware
+
+    try:
+        # Fetch transactions and product transactions from the database
+        transactions = transaction.objects.filter(date_time__gte=start_datetime,date_time__lt=end_datetime).order_by('-date_time').values()  # Using date_time instead of transaction_dt
+        print('transactions',transactions)
+        # Fetch product transactions (filtered by the date)
+        productTransactions = productTransaction.objects.filter(transaction_date_time__gte=start_datetime,transaction_date_time__lt=end_datetime).order_by('-transaction_date_time').values()
+        print('productTransactions',productTransactions)
+
+        # Check if there are no transactions
+        if not transactions.exists():
+            context['error'] = "No sales data available for the selected period."
+            return render(request, "salesDashboard.html", context)
+
+        # Process transactions data into DataFrame
+        df = pd.DataFrame(transactions.values())
+        if df.empty:
+            context['error'] = "No valid data found in the database."
+            return render(request, "salesDashboard.html", context)
+
+        # Apply timezone conversion to date_time and create 'date' column
+        df['date_time'] = df['date_time'].apply(lambda x: x.astimezone(tz))  # Using date_time here instead of transaction_dt
+        df['date'] = df['date_time'].dt.date  # Extract date part
+
+        # Group by 'date' and sum the total sales
+        df_date = df.groupby('date')['total_sale'].sum()
+        df_date.index = pd.to_datetime(df_date.index)
+
+        # Convert today_date.date() to pandas Timestamp for comparison
+        today_date_ts = pd.Timestamp(today_date.date())  # Convert to pandas.Timestamp
+        # Ensure missing keys are filled with zero (for today and beginning of the year)
+        df_date[today_date_ts] = df_date.get(today_date_ts, 0)
+        df_date = df_date.asfreq('D', fill_value=0)
+
+        # Profit/Loss calculation for product transactions
+        product_df = pd.DataFrame(productTransactions.values())
+        if not product_df.empty:
+            product_df['Profit_or_loss'] = (product_df['sales_price'] - product_df['cost_price']) * product_df['qty']
+            product_df['date'] = product_df['transaction_date_time'].apply(lambda x: x.astimezone(tz).date())  # Use transaction_date_time here
+
+            # Aggregate Profit/Loss by date
+            profit_loss_by_date = product_df.groupby('date')['Profit_or_loss'].sum()
+            total_profit_or_loss = profit_loss_by_date.sum()
+
+            # Add profit information to context
+            context['profit_today'] = profit_loss_by_date.get(today_date.date(), 0)
+            context['profit_last_30_days'] = profit_loss_by_date[profit_loss_by_date.index > (today_date - timedelta(30)).date()].sum()
+            context['profit_or_loss'] = total_profit_or_loss
+        else:
+            context['profit_today'] = 0
+            context['profit_last_30_days'] = 0
+            context['profit_or_loss'] = 0
+
+        # Populate context with sales data
+        # Ensure all 30 days are included, even if sales data is missing
+        date_range_30_days = pd.date_range(today_date_ts - timedelta(29), today_date_ts, freq='D')
+        df_last_30_days = df_date.reindex(date_range_30_days, fill_value=0)
+ 
+        # Ensure all 7 days are included for accurate weekly average
+        date_range_7_days = pd.date_range(today_date_ts - timedelta(6), today_date_ts, freq='D')
+        df_last_7_days = df_date.reindex(date_range_7_days, fill_value=0)
+ 
+        # Week-To-Date (WTD) Sales: From start of the current week (Monday) to today
+        start_of_week = today_date_ts - timedelta(today_date_ts.weekday())  # Monday of the current week
+        wtd_total_sales = df_date.loc[start_of_week:today_date_ts].sum()
+ 
+        # Month-To-Date (MTD) Sales: From start of the current month to today
+        start_of_month = today_date_ts.replace(day=1)  # First day of the month
+        mtd_total_sales = df_date.loc[start_of_month:today_date_ts].sum()
+ 
+        # Year-To-Date (YTD) Sales: From start of the current year to today
+        start_of_year = today_date_ts.replace(month=1, day=1)  # January 1st
+        ytd_total_sales = df_date.loc[start_of_year:today_date_ts].sum()
+
+        context['today_total_sales'] = df_date.get(today_date_ts, 0)
+ 
+        context["add_info"] = {
+            'Yesterday\'s Total Sales': df_date.get(today_date_ts - timedelta(1), 0),
+            'Last 7 Days Avg Sales': df_last_7_days.sum() / 7,  # Fixed to ensure all 7 days are included
+            '30 Days Avg Sales': df_last_30_days.mean(),  # Fixed to ensure all 30 days are included
+            '30 Days Total Sales': df_last_30_days.sum(),  # Fixed for accuracy
+            'WTD Total Sales': wtd_total_sales,  # Fixed to use Monday as the start of the week
+            'Last Week Total Sales': df_date.loc[start_of_week - timedelta(7): start_of_week - timedelta(1)].sum(),
+            'MTD Total Sales': mtd_total_sales,  # Fixed to use the start of the month
+            'YTD Total Sales': ytd_total_sales,  # Fixed to use January 1st as the start of the year
+        }
+
+        # Plotly: 30 Days Sales Chart
+        fig = px.bar(
+            x=df_date.index, y=df_date, text_auto=True, barmode='group', template="plotly_white",
+            labels={"x": "Date", "y": "Total Sales"}
+        )
+        fig.update_xaxes(title="Days", tickformat='%a, %d/%m', tickangle=-90)
+        fig.update_yaxes(title="Total Sales")
+        fig.update_layout(margin=dict(b=10, pad=0, t=10, r=0, l=0))
+        context['30_day_sales_graph'] = po.plot(fig, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
+
+        # Plotly: Profit/Loss Chart
+        if not product_df.empty:
+            profit_loss_chart = px.bar(
+                profit_loss_by_date.reset_index(), x='date', y='Profit_or_loss',
+                labels={"date": "Date", "Profit_or_loss": "Profit/Loss ($)"}, title="Daily Profit/Loss"
+            )
+            profit_loss_chart.update_traces(
+                marker_color = profit_loss_by_date.apply(lambda x: 'green' if x>0 else 'red')
+            )
+            profit_loss_chart.update_layout(margin=dict(b=10, pad=0, t=10))
+            context['profit_loss_graph'] = po.plot(profit_loss_chart, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
+
+        # Plotly: Payment Type Pie Chart for Today
+        df_day_payment = df[df['date'] == today_date.date()].groupby('payment_type')['total_sale'].sum().reset_index()
+        if not df_day_payment.empty:
+            fig2 = px.pie(
+                df_day_payment, values='total_sale', names='payment_type', template="plotly_white", height=195,
+                labels={"payment_type": "Payment Type", "total_sale": "Total Sales"}
+            )
+            fig2.update_layout(margin=dict(b=10, pad=0, t=10))
+            context['day_payment_graph'] = po.plot(fig2, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
+        else:
+            # print("No payment data found for today.")  # Debugging message
+            context['error'] = "No payment data available for today."
+
+    except Exception as e:
+        # print(f"Error in dashboard_sales view: {e}")  # Debugging message
+        context['error'] = f"An error occurred while generating the sales dashboard: {str(e)}"
+        return render(request, "salesDashboard.html", context)
+    
+    context['form'] = form
+
+    return render(request, "salesDashboard.html", context)
 
 @login_required(login_url="/user/login/")
 def dashboard_department(request):
@@ -555,16 +659,6 @@ def dashboard_department(request):
         bar_fig.update_yaxes(title=f"Total Sales ({start_date:%Y/%m/%d} - {end_date:%Y/%m/%d})")
         bar_fig.update_layout(margin = dict(b=10,pad=0,t=10,l=10,r=10),height=500,showlegend=False)
 
-        # df['date'] = df['transaction_date_time'].dt.date
-        # date_group = df.groupby(['date','department','payment_type'])[['qty','total_pre_sales','tax_amount','deposit_amount','total_sales']].apply(lambda x : x.sum())
-        # date_group = date_group.reset_index()
-        # bar_fig = px.bar(date_group, x="date",  y="total_sales", facet_row="department", hover_name="total_sales", color="payment_type",
-        #         hover_data={'qty':True,'total_pre_sales':True,'tax_amount':True,'deposit_amount':True,'total_sales':False,},
-        #         labels={'qty':"Quantity",'payment_type':"Payment Type",'department':"Department",'total_sales':"Total Sales","total_pre_sales":"Total Sales b4 Tax & Deposit",
-        #                 'tax_amount':"Total Tax Amount",'deposit_amount':"Total Deposit Amount",'date':"Date"},
-        #          color_discrete_sequence=["darkgreen", "royalblue", "darkslategray"])
-        # bar_fig.update_layout(margin = dict(b=10,pad=0,t=10,l=10,r=10),height=500,showlegend=False)
-
         context['bar_fig'] = po.plot(bar_fig, auto_open=False, output_type='div',config= {'displayModeBar': False},include_plotlyjs=False)
 
     context["report_link"] = f"/department_report/{start_date}/{end_date}/"
@@ -573,157 +667,24 @@ def dashboard_department(request):
 
 
 @login_required(login_url="/user/login/")
-def dashboard_sales(request):
-    if request.user.roles == 'posuser':
-        return redirect("/register/")
-    if request.user.roles == 'inventoryuser':
-        return redirect("/inventory/")
-    if request.user.is_superuser == True:
-        return redirect("/dashboard/")
-    # print("Dashboard view is loading...")  # Debugging message
-
-    context = {}
-    tz = pytz.timezone('US/Eastern')  # Adjust timezone as per your location
-
-    # Ensure 'today_date' is timezone-aware and combine with time (00:00:00)
-    today_date = datetime.combine(datetime.now().date(), datetime.min.time())
-    today_date = tz.localize(today_date)  # Make it timezone-aware
-
+def dashboard_products(request):
     try:
-        # Debugging: Check what today_date looks like
-        # print(f"today_date (timezone aware): {today_date}")
+        number = 10
+        context = {}
+        today_date=datetime.now().date()
+        last_30_date = datetime.now().date() - timedelta(30)
+        df = pd.DataFrame(productTransaction.objects.filter(transaction_date_time__date__range = (last_30_date,today_date)).order_by('-transaction_date_time').values())
+        context['products_group'] = {}
+        for i, df in df.groupby('department'):
+            context['products_group'][i] = df.groupby(["barcode","name"])[["qty"]].sum().reset_index().sort_values(by=["qty"],ascending=False).iloc[:number].to_dict('records')
 
-        # Fetch transactions and product transactions from the database
-        transactions = transaction.objects.filter(date_time__gte=today_date)  # Using date_time instead of transaction_dt
-        
-        # Debugging: Check if transactions are returned
-        # print(f"Transactions query: {transactions}")
-        # print(f"Transactions count: {transactions.count()}")
+        # Fetching low inventory products (less than 100 qty)
+        context['low_inventory_products'] = product.objects.filter(qty__lt=100).order_by('qty').values('barcode', 'name', 'qty')[:50]
+        context['number'] = number
+    except:
+        return redirect("/register/")
+    return render(request,"productsDashboard.html",context=context)
 
-        # Fetch product transactions (filtered by the date)
-        productTransactions = productTransaction.objects.filter(transaction_date_time__date__gte=today_date.date())
-
-        # Debugging: Check if any product transactions are returned
-        # print(f"Product Transactions query: {productTransactions}")
-        # print(f"Product Transactions count: {productTransactions.count()}")
-
-        # Check if there are no transactions
-        if not transactions.exists():
-            # print("No transactions found for the given date range.")  # Debugging message
-            context['error'] = "No sales data available for the selected period."
-            return render(request, "salesDashboard.html", context)
-
-        # Process transactions data into DataFrame
-        df = pd.DataFrame(transactions.values())
-        if df.empty:
-            # print("DataFrame is empty.")  # Debugging message
-            context['error'] = "No valid data found in the database."
-            return render(request, "salesDashboard.html", context)
-
-        # Debugging: Check the first few rows of the dataframe
-        # print(f"Processed transactions DataFrame:\n{df.head()}")
-
-        # Apply timezone conversion to date_time and create 'date' column
-        df['date_time'] = df['date_time'].apply(lambda x: x.astimezone(tz))  # Using date_time here instead of transaction_dt
-        df['date'] = df['date_time'].dt.date  # Extract date part
-
-        # Debugging: Print the first few rows to verify the data
-        # print(f"Processed transactions with 'date' column:\n{df.head()}")
-
-        # Group by 'date' and sum the total sales
-        df_date = df.groupby('date')['total_sale'].sum()
-        df_date.index = pd.to_datetime(df_date.index)
-
-        # Convert today_date.date() to pandas Timestamp for comparison
-        today_date_ts = pd.Timestamp(today_date.date())  # Convert to pandas.Timestamp
-        # Ensure missing keys are filled with zero (for today and beginning of the year)
-        df_date[today_date_ts] = df_date.get(today_date_ts, 0)
-        df_date = df_date.asfreq('D', fill_value=0)
-
-        # Debugging: Print the sales data by date
-        # print(f"Sales data by date:\n{df_date.head()}")
-
-        # Profit/Loss calculation for product transactions
-        product_df = pd.DataFrame(productTransactions.values())
-        if not product_df.empty:
-            product_df['Profit_or_loss'] = (product_df['sales_price'] - product_df['cost_price']) * product_df['qty']
-            product_df['date'] = product_df['transaction_date_time'].apply(lambda x: x.astimezone(tz).date())  # Use transaction_date_time here
-
-            # Aggregate Profit/Loss by date
-            profit_loss_by_date = product_df.groupby('date')['Profit_or_loss'].sum()
-            total_profit_or_loss = profit_loss_by_date.sum()
-
-            # Debugging: Print the profit/loss data
-            # print(f"Profit/Loss by date:\n{profit_loss_by_date.head()}")
-
-            # Add profit information to context
-            context['profit_today'] = profit_loss_by_date.get(today_date.date(), 0)
-            context['profit_last_30_days'] = profit_loss_by_date[profit_loss_by_date.index > (today_date - timedelta(30)).date()].sum()
-            context['profit_or_loss'] = total_profit_or_loss
-        else:
-            # print("No product transactions found.")  # Debugging message
-            context['profit_today'] = 0
-            context['profit_last_30_days'] = 0
-            context['profit_or_loss'] = 0
-
-        # Populate context with sales data
-        context['today_total_sales'] = df_date.get(today_date_ts, 0)
-        context["add_info"] = {
-            'Yesterday\'s Total Sales': df_date.get(today_date_ts - timedelta(1), 0),
-            'Last 7 Days Avg Sales': df_date[df_date.index > today_date_ts - timedelta(7)].sum() / 7,
-            '30 Days Avg Sales': df_date[df_date.index > today_date_ts - timedelta(30)].mean(),
-            '30 Days Total Sales': df_date[df_date.index > today_date_ts - timedelta(30)].sum(),
-            'WTD Total Sales': df_date.resample('W').sum()[-1] if len(df_date) > 7 else 0,
-            'Last Week Total Sales': df_date.resample('W').sum()[-2] if len(df_date) > 14 else 0,
-            'MTD Total Sales': df_date.resample('M').sum()[-1] if len(df_date) > 30 else 0,
-            'YTD Total Sales': df_date.resample('Y').sum()[-1] if len(df_date) > 365 else 0,
-        }
-
-        # Debugging: Print the sales breakdown
-        # print(f"Sales breakdown info:\n{context['add_info']}")
-
-        # Plotly: 30 Days Sales Chart
-        fig = px.bar(
-            x=df_date.index, y=df_date, text_auto=True, barmode='group', template="plotly_white",
-            labels={"x": "Date", "y": "Total Sales"}
-        )
-        fig.update_xaxes(title="Days", tickformat='%a, %d/%m', tickangle=-90)
-        fig.update_yaxes(title="Total Sales")
-        fig.update_layout(margin=dict(b=10, pad=0, t=10, r=0, l=0))
-        context['30_day_sales_graph'] = po.plot(fig, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
-
-        # Plotly: Profit/Loss Chart
-        if not product_df.empty:
-            profit_loss_chart = px.bar(
-                profit_loss_by_date.reset_index(), x='date', y='Profit_or_loss',
-                labels={"date": "Date", "Profit_or_loss": "Profit/Loss ($)"}, title="Daily Profit/Loss"
-            )
-            profit_loss_chart.update_traces(
-                marker_color = profit_loss_by_date.apply(lambda x: 'green' if x>0 else 'red')
-            )
-            profit_loss_chart.update_layout(margin=dict(b=10, pad=0, t=10))
-            context['profit_loss_graph'] = po.plot(profit_loss_chart, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
-
-        # Plotly: Payment Type Pie Chart for Today
-        df_day_payment = df[df['date'] == today_date.date()].groupby('payment_type')['total_sale'].sum().reset_index()
-        if not df_day_payment.empty:
-            fig2 = px.pie(
-                df_day_payment, values='total_sale', names='payment_type', template="plotly_white", height=195,
-                labels={"payment_type": "Payment Type", "total_sale": "Total Sales"}
-            )
-            fig2.update_layout(margin=dict(b=10, pad=0, t=10))
-            context['day_payment_graph'] = po.plot(fig2, auto_open=False, output_type='div', config={'displayModeBar': False}, include_plotlyjs=True)
-        else:
-            # print("No payment data found for today.")  # Debugging message
-            context['error'] = "No payment data available for today."
-
-    except Exception as e:
-        # print(f"Error in dashboard_sales view: {e}")  # Debugging message
-        context['error'] = f"An error occurred while generating the sales dashboard: {str(e)}"
-        return render(request, "salesDashboard.html", context)
-    
-
-    return render(request, "salesDashboard.html", context)
 
 
 @login_required(login_url="/user/login/")
@@ -733,53 +694,98 @@ def profit_loss_dashboard(request):
  
     # Get today's date, ensure it's timezone-aware
     today = datetime.now(tz).date()
+    yesterday = today - timedelta(days=1)
     last_30_days = today - timedelta(days=30)
- 
+    
+    # Month-to-Date (MTD) and Year-to-Date (YTD)
+    this_month_start = today.replace(day=1)
+    this_year_start = today.replace(month=1, day=1)
+    
+    # Week-to-Date (WTD) - Start of the current week (assuming week starts on Monday)
+    this_week_start = today - timedelta(days=today.weekday())
+
     try:
-        # Fetch product transactions for the last 30 days
-        product_transactions = productTransaction.objects.filter(transaction_date_time__date__gte=last_30_days)
- 
+        # Fetch product transactions for relevant periods
+        product_transactions = productTransaction.objects.filter(transaction_date_time__date__gte=this_year_start)
+
         if not product_transactions.exists():
             context['error'] = "No product transactions available for the selected period."
             return render(request, "profitLossDashboard.html", context)
- 
+
         # Convert transactions to DataFrame
         product_df = pd.DataFrame(product_transactions.values())
         if product_df.empty:
             context['error'] = "No valid product transaction data found."
             return render(request, "profitLossDashboard.html", context)
- 
+
         # Calculate Profit or Loss for each transaction
         product_df['Profit_or_Loss'] = (product_df['sales_price'] - product_df['cost_price']) * product_df['qty']
         product_df['date'] = product_df['transaction_date_time'].apply(lambda x: x.astimezone(tz).date())
- 
+
         # Aggregate Profit/Loss by date
         profit_loss_by_date = product_df.groupby('date')['Profit_or_Loss'].sum()
-       
-        # Get summary values
+
+        # Get summary values for each period
         context['profit_today'] = profit_loss_by_date.get(today, 0)
-        context['profit_last_30_days'] = profit_loss_by_date.tail(30).sum()
+        context['profit_yesterday'] = profit_loss_by_date.get(yesterday, 0)
+        context['profit_last_30_days'] = profit_loss_by_date.loc[last_30_days:].sum()
+        context['profit_this_month'] = profit_loss_by_date.loc[this_month_start:].sum()
+        context['profit_this_year'] = profit_loss_by_date.loc[this_year_start:].sum()
+        context['profit_this_week'] = profit_loss_by_date.loc[this_week_start:].sum()
         context['profit_or_loss'] = profit_loss_by_date.sum()
- 
+
         # Create Plotly bar chart
         profit_loss_chart = px.bar(
             profit_loss_by_date.reset_index(), x='date', y='Profit_or_Loss',
-            labels={"date": "Date", "Profit_or_Loss": "Profit/Loss ($)"}, title="Daily Profit/Loss"
+            labels={"date": "Date", "Profit_or_Loss": "Profit/Loss ($)"},
+            title="Daily Profit/Loss"
         )
- 
+
         # Update chart to color bars based on profit or loss
         profit_loss_chart.update_traces(
             marker_color=profit_loss_by_date.apply(lambda x: 'green' if x > 0 else 'red')
         )
- 
+
         # Render chart as HTML div
-        context['profit_loss_graph'] = po.plot(profit_loss_chart, auto_open=False, output_type='div', config={'displayModeBar': False})
-   
+        context['profit_loss_graph'] = po.plot(
+            profit_loss_chart, 
+            auto_open=False, 
+            output_type='div', 
+            config={'displayModeBar': False}
+        )
+
     except Exception as e:
         context['error'] = f"An error occurred while generating the Profit and Loss chart: {str(e)}"
- 
+
     return render(request, "profitLossDashboard.html", context)
+
+@login_required(login_url="/user/login/")
+def dashboard(request):
+    # Filter active users     
+    active_users = User.objects.filter(is_active=True)
  
+    # Filter inactive users
+    inactive_users = User.objects.filter(is_active=False)
+ 
+    # Get all clients with their associated user count and active user count
+    clients = Client.objects.annotate(user_count=Count('users')).order_by('client_name')
+    # Get clients with only active users
+ 
+    # Prepare data for the bar graph
+    client_names = [client.client_name for client in clients]
+    total_users = [client.user_count for client in clients]
+ 
+    context = {
+        'active_users': active_users,
+        'inactive_users': inactive_users,
+        'clients': clients,  # All clients with the total user count
+        'client_names': client_names,
+        'total_users': total_users,
+    }
+ 
+    return render(request, "dashboard.html", context)
+
+
 @api_view(['POST']) 
 @login_required(login_url="/user/login/")
 def add_displayed_item(request):

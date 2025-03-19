@@ -9,6 +9,21 @@ Sales Dashboard | Online Retail POS
 {% endblock %}
 
 {% block content %}
+<div class="row col-lg-12" style="width:100%;">
+    <small style="text-align:right">Note: Currently displaying data from the past 7 days. Expand the date range to view older records.</small>
+</div>
+<div class="row col-lg-12">
+    <div class="col-lg-10 pr-0 mr-0" style="width:100%;">
+        <form class="row col-lg-12 form mb-1 pr-0" action="{{ request.get_full_path }}" method = "POST" style="width:100%;justify-content:center;text-align:center ;">
+            {% csrf_token %}
+            {% for field in form %}
+            <ul class="col-lg-5" style="margin-top:20px;margin-bottom:20px"><strong style="color:black;">{{ field.label }} :</strong> {{ field }}</ul>
+            {% endfor %}
+            <input class="col-lg-2 btn btn-primary" style="width:100%;height:50px;margin-top:10px;padding-left: 0%;padding-right:0%;padding-right:0%"  id="submit-barcode" type="submit" value="Generate Dashboard">
+        </form>
+    </div>
+</div>
+<hr>
 <div class="row col-lg-12">
     <!-- Sales Summary Section -->
     <div class="col-lg-5" style="width:100%;">

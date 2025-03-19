@@ -241,7 +241,6 @@ Register | Online Retail POS
             <!-- Sticky Top Row for Top Selling Items -->
                 <div class="top-selling-row" style="position: sticky; top: 0; background-color: white; z-index: 0; padding: 5px 0; box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1); border-bottom: 2px solid #ddd;">
                     {% for item in top_selling_items %}
-                        {% with item.displayed_items.first as display_item %}
                             <div class="button-wrapper" style="display: inline-block; position: relative; width: 23%;">
                                 <button onclick="return window.open('/cart/add/{{ item.barcode }}/1/', target='_self')"
                                         class="btn btn-success"  
@@ -255,7 +254,6 @@ Register | Online Retail POS
                                        value="0"
                                        data-item-name="{{ item.name }}">  
                             </div>
-                        {% endwith %}
                     {% endfor %}
                 </div>
         </div>

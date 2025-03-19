@@ -13,8 +13,8 @@ Products Dashboard | Online Retail POS
         <div class="col-lg-6 mt-3">
             <div class="card shadow">
                 <div class="card-header">
-                    <div class="font-weight-bold text-success h3 text-center p-3"> Top Best-Seller Products </div>
-                    <div> Top {{number}} Best Seller for Each Department.<br> Scroll to View.... </div> 
+                    <div class="font-weight-bold text-success h3 text-center p-3"> Top-Selling Products </div>
+                    <small> Top {{number}} Best-Selling Products in Each Department.</small> 
                 </div>
                 <div class="card-body " style="height:490px;overflow-y: visible;overflow-x:scroll" >
                     {% for dptmnt, value in products_group.items %}
@@ -49,7 +49,7 @@ Products Dashboard | Online Retail POS
             <div class="card shadow">
                 <div class="card-header">
                     <div class="font-weight-bold text-danger h3 text-center p-3"> Low Inventory Products </div>
-                    <div> Top 50 Products that are low in inventory or is quantity is wrong. Please take a look into it. </div> 
+                    <small>Top 50 Low Inventory Products: These items have limited stock or quantities below 100</small> 
                 </div>
                 <div class="card-body" >
                     <table class="table  mb-0 pl-2" width="100%" cellspacing="1" >
